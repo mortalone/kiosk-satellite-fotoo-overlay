@@ -2,6 +2,10 @@
 package me.jxl.kiosk.plugins.fotoooverlay;
 
 import android.app.Application;
+import android.app.AppOpsManager;
+import android.app.usage.UsageEvents;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -15,6 +19,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
@@ -34,6 +39,7 @@ import java.net.URLConnection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -43,7 +49,7 @@ import me.jxl.kiosk.plugins.KioskPlugin;
 import me.jxl.kiosk.plugins.PluginHost;
 
 /**
- * Native Android overlays shown only while Android is dreaming (Fotoo).
+ * Native Android overlays shown while Fotoo is active, either as Android\n * DreamService/screensaver or as the foreground Fotoo app.
  *
  * The public KS SDK does not currently expose an Android Context. This plugin
  * therefore obtains the application Context with a small reflection fallback.
@@ -57,8 +63,12 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private ExecutorService io;
+    private static final String FOTOO_PACKAGE = "com.bo.fotoo";
     private BroadcastReceiver dreamReceiver;
     private boolean dreaming;
+    private boolean fotooForeground;
+    private String lastForegroundPackage = "";
+    private long usageCursor;
 
     private final Set<String> subscribedEntities = new HashSet<>();
     private String nowPlayingEntity = "";
@@ -87,6 +97,18 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private ImageView doorbellImage;
     private boolean cameraFetchPending;
 
+    private final Runnable foregroundProbeTask = new Runnable() {
+        @Override public void run() {
+            if (context == null) return;
+            boolean next = isFotooForeground();
+            if (next != fotooForeground) {
+                fotooForeground = next;
+                updatePresentation();
+            }
+            main.postDelayed(this, 1000);
+        }
+    };
+
     private final Runnable hideDoorbellTask = new Runnable() {
         @Override public void run() {
             hideDoorbell();
@@ -96,7 +118,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private final Runnable cameraRefreshTask = new Runnable() {
         @Override public void run() {
-            if (doorbellView == null || !dreaming) return;
+            if (doorbellView == null || !fotooActive()) return;
             refreshDoorbellImage();
             main.postDelayed(this, 1000);
         }
@@ -126,7 +148,11 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         registerDreamReceiver();
         applySettings(settings);
         readHomeAssistantBaseUrl();
-        host.status("Ready. Overlays are created only after Android starts Fotoo.", false);
+        main.post(foregroundProbeTask);
+        host.status(hasUsageAccess()
+                ? "Ready. Fotoo is detected as DreamService or foreground app."
+                : "Ready for Fotoo DreamService. Grant Usage access to Kiosk Satellite to also detect Fotoo launched as an app.",
+                false);
     }
 
     @Override
@@ -179,7 +205,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                 trigger = "on".equalsIgnoreCase(state) && !"on".equalsIgnoreCase(lastDoorbellState);
             }
             lastDoorbellState = state;
-            if (trigger && dreaming) main.post(this::showDoorbell);
+            if (trigger && fotooActive()) main.post(this::showDoorbell);
         }
     }
 
@@ -209,11 +235,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                 String action = intent.getAction();
                 if (Intent.ACTION_DREAMING_STARTED.equals(action)) {
                     dreaming = true;
-                    updateNowPlaying();
+                    updatePresentation();
                 } else if (Intent.ACTION_DREAMING_STOPPED.equals(action)) {
                     dreaming = false;
-                    hideDoorbell();
-                    hideNowPlaying();
+                    updatePresentation();
                 }
             }
         };
@@ -270,8 +295,81 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         });
     }
 
+    private boolean fotooActive() {
+        return dreaming || fotooForeground;
+    }
+
+    private void updatePresentation() {
+        if (!fotooActive()) {
+            hideDoorbell();
+            hideNowPlaying();
+            return;
+        }
+        updateNowPlaying();
+    }
+
+    private boolean hasUsageAccess() {
+        if (context == null || Build.VERSION.SDK_INT < 21) return true;
+        try {
+            AppOpsManager appOps = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
+            int mode = appOps.checkOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    Process.myUid(),
+                    context.getPackageName());
+            return mode == AppOpsManager.MODE_ALLOWED;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private boolean isFotooForeground() {
+        if (context == null || !hasUsageAccess()) return false;
+        try {
+            UsageStatsManager manager =
+                    (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+            if (manager == null) return false;
+
+            long now = System.currentTimeMillis();
+            long from = usageCursor == 0 ? now - 5 * 60_000L : Math.max(0, usageCursor - 1000L);
+            UsageEvents events = manager.queryEvents(from, now);
+            UsageEvents.Event event = new UsageEvents.Event();
+            long newest = usageCursor;
+            while (events != null && events.hasNextEvent()) {
+                events.getNextEvent(event);
+                int type = event.getEventType();
+                if ((type == UsageEvents.Event.ACTIVITY_RESUMED
+                        || type == UsageEvents.Event.MOVE_TO_FOREGROUND)
+                        && event.getTimeStamp() >= newest) {
+                    newest = event.getTimeStamp();
+                    lastForegroundPackage = event.getPackageName();
+                }
+            }
+
+            // If the plugin starts after Fotoo was already opened and the
+            // event window contained nothing, seed the last package from the
+            // most recently used app. Subsequent probes use UsageEvents.
+            if (usageCursor == 0 && lastForegroundPackage.isEmpty()) {
+                List<UsageStats> stats = manager.queryUsageStats(
+                        UsageStatsManager.INTERVAL_DAILY, now - 24 * 60 * 60_000L, now);
+                long lastUsed = 0;
+                if (stats != null) {
+                    for (UsageStats stat : stats) {
+                        if (stat.getLastTimeUsed() >= lastUsed) {
+                            lastUsed = stat.getLastTimeUsed();
+                            lastForegroundPackage = stat.getPackageName();
+                        }
+                    }
+                }
+            }
+            usageCursor = Math.max(newest, now - 1000L);
+            return FOTOO_PACKAGE.equals(lastForegroundPackage);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     private void updateNowPlaying() {
-        if (!dreaming || doorbellView != null || nowPlayingEntity.isEmpty() || !mediaVisible()) {
+        if (!fotooActive() || doorbellView != null || nowPlayingEntity.isEmpty() || !mediaVisible()) {
             hideNowPlaying();
             return;
         }
@@ -357,7 +455,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private void showDoorbell() {
-        if (!dreaming || context == null || windowManager == null) return;
+        if (!fotooActive() || context == null || windowManager == null) return;
         hideNowPlaying();
         main.removeCallbacks(hideDoorbellTask);
         main.removeCallbacks(cameraRefreshTask);
@@ -455,7 +553,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.2 test");
+        test.setText("Fotoo Overlay 0.3 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
