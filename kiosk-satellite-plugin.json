@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo. DreamService is detected exactly; manual Fotoo launches use a dedicated plugin action so overlays never spill onto unrelated Android settings/apps.",
+  "description": "Native Android overlays above Fotoo with configurable Now Playing progress, playlist/next-track metadata and persistent doorbell camera test mode.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
@@ -55,6 +55,60 @@
       "description": "Distance from the selected top or bottom edge. Increase this to avoid Fotoo's clock or other overlays."
     },
     {
+      "key": "showProgress",
+      "type": "boolean",
+      "title": "Show progress bar",
+      "default": true,
+      "group": "Now Playing",
+      "description": "Show the current playback position as a progress bar when the media player exposes duration and position."
+    },
+    {
+      "key": "timeLabels",
+      "type": "select",
+      "title": "Time labels",
+      "default": "Elapsed / remaining",
+      "options": [
+        "Elapsed / total",
+        "Elapsed / remaining",
+        "Remaining only",
+        "Off"
+      ],
+      "group": "Now Playing",
+      "description": "Choose the time shown under the progress bar."
+    },
+    {
+      "key": "showPlaylist",
+      "type": "boolean",
+      "title": "Show playlist/source",
+      "default": false,
+      "group": "Now Playing",
+      "description": "Show playlist/source when the media player exposes a useful name, or use the optional entity below."
+    },
+    {
+      "key": "playlistEntity",
+      "type": "entity",
+      "title": "Playlist name entity (optional)",
+      "default": "",
+      "group": "Now Playing",
+      "description": "Optional Home Assistant sensor/text entity whose state is used as the playlist name."
+    },
+    {
+      "key": "showNextTrack",
+      "type": "boolean",
+      "title": "Show next track",
+      "default": false,
+      "group": "Now Playing",
+      "description": "Show the next track if the media player exposes it, or use the optional entity below."
+    },
+    {
+      "key": "nextTrackEntity",
+      "type": "entity",
+      "title": "Next track entity (optional)",
+      "default": "",
+      "group": "Now Playing",
+      "description": "Optional Home Assistant sensor/text entity whose state contains the next track title."
+    },
+    {
       "key": "doorbellEntity",
       "type": "entity",
       "title": "Doorbell trigger entity",
@@ -81,6 +135,14 @@
       "unit": "s",
       "group": "Doorbell",
       "description": "How long the camera overlay stays above Fotoo after a doorbell trigger."
+    },
+    {
+      "key": "cameraTestMode",
+      "type": "boolean",
+      "title": "Camera test mode",
+      "default": false,
+      "group": "Doorbell",
+      "description": "Keep the selected doorbell camera visible for the whole Fotoo session, without pressing the real doorbell. Turn this off after testing."
     }
   ],
   "commands": [
