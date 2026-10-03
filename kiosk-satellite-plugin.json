@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo: exact DreamService detection plus a Kiosk-background fallback for Fotoo launched as an ordinary app.",
+  "description": "Native Android overlays above Fotoo. DreamService is detected exactly; manual Fotoo launches use a dedicated plugin action so overlays never spill onto unrelated Android settings/apps.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
@@ -43,6 +43,18 @@
       "description": "Place the card at the top or bottom of the Fotoo screensaver."
     },
     {
+      "key": "nowPlayingOffset",
+      "type": "number",
+      "title": "Edge offset",
+      "default": 34,
+      "min": 0,
+      "max": 500,
+      "step": 5,
+      "unit": "dp",
+      "group": "Now Playing",
+      "description": "Distance from the selected top or bottom edge. Increase this to avoid Fotoo's clock or other overlays."
+    },
+    {
       "key": "doorbellEntity",
       "type": "entity",
       "title": "Doorbell trigger entity",
@@ -72,6 +84,10 @@
     }
   ],
   "commands": [
+    {
+      "id": "openFotoo",
+      "title": "Open Fotoo with overlay"
+    },
     {
       "id": "test",
       "title": "Show test overlay"
