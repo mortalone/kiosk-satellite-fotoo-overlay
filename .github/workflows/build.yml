@@ -26,5 +26,5 @@ jobs:
       - name: Upload installable developer ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: fotoo-system-overlay-poc
-          path: dist/fotoo-system-overlay-poc-0.1.0.zip
+          name: fotoo-overlay
+          path: dist/fotoo-system-overlay-poc-*.zip

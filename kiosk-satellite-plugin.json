@@ -2,47 +2,91 @@
   "schemaVersion": 1,
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
-  "name": "Fotoo System Overlay POC",
-  "version": "0.1.0",
+  "name": "Fotoo Overlay",
+  "version": "0.2.0",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Proof of concept: draw a real Android TYPE_APPLICATION_OVERLAY from a Kiosk Satellite plugin so it remains visible above Fotoo's Android screensaver.",
-  "author": "Local Kiosk Satellite proof of concept",
+  "description": "Native Android overlays above Fotoo: Now Playing from a Home Assistant media_player and a temporary doorbell camera snapshot overlay.",
+  "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
-    "overlay"
+    "overlay",
+    "host.read"
   ],
   "settings": [
     {
-      "key": "showOnStart",
-      "type": "boolean",
-      "title": "Show test overlay when enabled",
-      "default": true,
-      "group": "Test",
-      "description": "Show the native Android overlay immediately when the plugin starts."
+      "key": "nowPlayingEntity",
+      "type": "entity",
+      "title": "Now Playing entity",
+      "default": "",
+      "group": "Now Playing",
+      "description": "Choose the Home Assistant media_player entity followed by Kiosk Satellite, for example media_player.drivhus."
     },
     {
-      "key": "message",
-      "type": "string",
-      "title": "Test text",
-      "default": "KS native overlay test\nIf this stays visible over Fotoo, the approach works.",
-      "group": "Test",
-      "description": "Text shown in the proof-of-concept overlay."
+      "key": "showPaused",
+      "type": "boolean",
+      "title": "Show while paused",
+      "default": true,
+      "group": "Now Playing",
+      "description": "Keep the Now Playing card visible while playback is paused."
+    },
+    {
+      "key": "nowPlayingPosition",
+      "type": "select",
+      "title": "Position",
+      "default": "Bottom",
+      "options": [
+        "Top",
+        "Bottom"
+      ],
+      "group": "Now Playing",
+      "description": "Place the card at the top or bottom of the Fotoo screensaver."
+    },
+    {
+      "key": "doorbellEntity",
+      "type": "entity",
+      "title": "Doorbell trigger entity",
+      "default": "",
+      "group": "Doorbell",
+      "description": "Choose a visitor/doorbell binary_sensor. An event entity is also supported and triggers on each new event state."
+    },
+    {
+      "key": "doorbellCameraEntity",
+      "type": "entity",
+      "title": "Doorbell camera entity",
+      "default": "",
+      "group": "Doorbell",
+      "description": "Choose the Home Assistant camera entity whose entity_picture should be shown when the doorbell rings."
+    },
+    {
+      "key": "doorbellSeconds",
+      "type": "number",
+      "title": "Camera display time",
+      "default": 20,
+      "min": 5,
+      "max": 60,
+      "step": 1,
+      "unit": "s",
+      "group": "Doorbell",
+      "description": "How long the camera overlay stays above Fotoo after a doorbell trigger."
     }
   ],
   "commands": [
     {
-      "id": "show",
-      "title": "Show system overlay"
+      "id": "test",
+      "title": "Show test overlay"
     },
     {
       "id": "hide",
-      "title": "Hide system overlay"
+      "title": "Hide overlays"
     }
   ],
   "groups": [
     {
-      "title": "Test"
+      "title": "Now Playing"
+    },
+    {
+      "title": "Doorbell"
     }
   ]
 }

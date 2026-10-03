@@ -1,79 +1,55 @@
-# Fotoo System Overlay POC for Kiosk Satellite
+# Fotoo Overlay for Kiosk Satellite
 
-This is a deliberately small proof of concept.
+Native Android overlays above Fotoo while Fotoo is running as Android's real DreamService/screensaver.
 
-## Goal
+## Version 0.2
 
-Verify that a Kiosk Satellite SDK 1 plugin can create a real Android
-`TYPE_APPLICATION_OVERLAY` which remains visible while Fotoo is running as
-Android's native screensaver (DreamService).
+The proof of concept succeeded on the Raspberry Pi 4 / Android 14 panel: a real
+`TYPE_APPLICATION_OVERLAY` remains visible above Fotoo.
 
-This is **not** the final Now Playing implementation yet. First we prove the
-system-overlay layer works on the Raspberry Pi / Android 14 build.
+Version 0.2 changes the behavior so there is **no permanent overlay before
+Fotoo starts**. The plugin listens for Android's dreaming start/stop broadcasts
+and creates overlays only while a DreamService is active.
 
-## Important implementation detail
+### Now Playing
 
-Kiosk Satellite's public plugin API currently does not expose an Android
-`Context`, while a native WindowManager overlay needs one. Plugins run inside
-the Kiosk Satellite process and are not sandboxed, so this POC obtains the
-application context using:
+Choose a Home Assistant `media_player` entity in the plugin settings. While
+Fotoo is running and the player is playing (or paused, when enabled), the
+plugin shows:
 
-1. `ActivityThread.currentApplication()` by reflection.
-2. A fallback that walks the current Kiosk Satellite PluginHost's enclosing
-   objects until it finds PluginBridge's Context.
+- album artwork from `entity_picture`
+- title
+- artist
+- album
 
-Both are compatibility hacks. They are isolated in one method so they can be
-replaced if Kiosk Satellite later exposes a supported Context/system-overlay
-API.
+The card disappears automatically when Fotoo exits.
 
-## Build with GitHub Actions
+### Doorbell
 
-1. Create a GitHub repository and upload the contents of this folder.
-2. Open **Actions -> Build developer ZIP -> Run workflow**.
-3. Download the artifact named `fotoo-system-overlay-poc`.
-4. Inside it is `fotoo-system-overlay-poc-0.1.0.zip`.
+Choose:
 
-## Install
+- a doorbell/visitor trigger entity
+- a camera entity
+- display duration
 
-In Kiosk Satellite:
+A binary sensor triggers when it changes to `on`. An `event.*` entity
+triggers whenever it receives a new event state. While Fotoo is active, the
+camera overlay temporarily takes priority over Now Playing and refreshes the
+camera entity's `entity_picture` about once per second.
 
-**Plugin Manager -> Developer Tools -> Install from ZIP**
+## Install developer build
 
-Choose `fotoo-system-overlay-poc-0.1.0.zip`, accept the local-development
-warning, then enable the plugin.
+Build with GitHub Actions, download the `fotoo-overlay` workflow artifact,
+extract it, then install `fotoo-system-overlay-poc-0.2.0.zip` through:
 
-Kiosk Satellite must already have **Display over other apps** permission.
+**Kiosk Satellite -> Plugin Manager -> Developer Tools -> Install from ZIP**
 
-## Test
+Kiosk Satellite must have **Display over other apps** permission.
 
-With `Show test overlay when enabled` on, a dark card should appear near the
-bottom of the screen:
+## First test
 
-    KS native overlay test
-    If this stays visible over Fotoo, the approach works.
+Configure only **Now Playing entity** first, for example
+`media_player.drivhus`. Start music and let Android enter Fotoo normally.
+The card should appear only after Fotoo starts and disappear when Fotoo ends.
 
-Then leave the panel untouched until Android starts Fotoo as its system
-screensaver.
-
-### Pass
-
-The test card remains visible **above Fotoo**.
-
-Touching elsewhere on the screen should still dismiss Fotoo and return to
-Kiosk Satellite because the proof-of-concept card is deliberately
-`FLAG_NOT_TOUCHABLE`.
-
-### Fail
-
-If the card disappears when Fotoo starts, or the plugin reports an error,
-capture the plugin status and Kiosk Satellite log. That tells us which layer
-the ROM is blocking.
-
-## Next phase after a pass
-
-Replace the test card with a real native overlay controller:
-
-- Now Playing: title, artist, playback state and controls.
-- Optional album artwork.
-- Doorbell: temporary live camera overlay above Fotoo.
-- Hide/show rules based on playback and doorbell state.
+Then configure the doorbell entities.
