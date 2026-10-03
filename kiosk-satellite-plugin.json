@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo, detected as either Android DreamService or the foreground Fotoo app: Now Playing plus a temporary doorbell camera overlay.",
+  "description": "Native Android overlays above Fotoo: exact DreamService detection plus a Kiosk-background fallback for Fotoo launched as an ordinary app.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
