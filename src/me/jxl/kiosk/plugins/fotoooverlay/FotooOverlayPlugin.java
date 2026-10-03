@@ -59,12 +59,12 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private ExecutorService io;
+    private static final String FOTOO_PACKAGE = "com.bo.fotoo";
     private BroadcastReceiver dreamReceiver;
     private Application application;
     private Application.ActivityLifecycleCallbacks lifecycleCallbacks;
     private boolean dreaming;
-    private boolean kioskForeground = true;
-    private int lifecycleGeneration;
+    private boolean manualFotoo;
 
     private final Set<String> subscribedEntities = new HashSet<>();
     private String nowPlayingEntity = "";
@@ -72,6 +72,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private String doorbellCameraEntity = "";
     private boolean showPaused = true;
     private String nowPlayingPosition = "Bottom";
+    private int nowPlayingOffset = 34;
     private int doorbellSeconds = 20;
 
     private String haBaseUrl;
@@ -133,7 +134,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         registerActivityLifecycle();
         applySettings(settings);
         readHomeAssistantBaseUrl();
-        host.status("Ready. DreamService is detected exactly; ordinary Fotoo app uses Kiosk background state.", false);
+        host.status("Ready. Fotoo DreamService is automatic. Use the 'Open Fotoo with overlay' action for manual app mode.", false);
     }
 
     @Override
@@ -144,7 +145,9 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     @Override
     public synchronized void execute(String command, Map<String, Object> arguments) {
-        if ("test".equals(command)) {
+        if ("openFotoo".equals(command)) {
+            openFotoo();
+        } else if ("test".equals(command)) {
             showTestOverlay();
         } else if ("hide".equals(command)) {
             main.post(() -> {
@@ -247,27 +250,35 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             @Override public void onActivityStarted(Activity activity) {}
             @Override public void onActivityResumed(Activity activity) {
                 if (!activity.getPackageName().equals(context.getPackageName())) return;
-                lifecycleGeneration++;
-                if (!kioskForeground) {
-                    kioskForeground = true;
+                if (manualFotoo) {
+                    manualFotoo = false;
                     updatePresentation();
                 }
             }
-            @Override public void onActivityPaused(Activity activity) {
-                if (!activity.getPackageName().equals(context.getPackageName())) return;
-                final int generation = ++lifecycleGeneration;
-                main.postDelayed(() -> {
-                    if (context != null && generation == lifecycleGeneration && kioskForeground) {
-                        kioskForeground = false;
-                        updatePresentation();
-                    }
-                }, 350);
-            }
+            @Override public void onActivityPaused(Activity activity) {}
             @Override public void onActivityStopped(Activity activity) {}
             @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
             @Override public void onActivityDestroyed(Activity activity) {}
         };
         application.registerActivityLifecycleCallbacks(lifecycleCallbacks);
+    }
+
+    private void openFotoo() {
+        if (context == null) return;
+        try {
+            Intent launch = context.getPackageManager().getLaunchIntentForPackage(FOTOO_PACKAGE);
+            if (launch == null) {
+                host.status("Fotoo is not installed or has no launchable activity.", true);
+                return;
+            }
+            manualFotoo = true;
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(launch);
+            main.postDelayed(this::updatePresentation, 500);
+        } catch (Throwable error) {
+            manualFotoo = false;
+            host.status("Could not open Fotoo: " + safeMessage(error), true);
+        }
     }
 
     private void applySettings(Map<String, Object> values) {
@@ -295,6 +306,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         doorbellCameraEntity = nextCamera;
         showPaused = Boolean.TRUE.equals(values.get("showPaused"));
         nowPlayingPosition = "Top".equals(values.get("nowPlayingPosition")) ? "Top" : "Bottom";
+        Object offset = values.get("nowPlayingOffset");
+        nowPlayingOffset = offset instanceof Number ? Math.max(0, Math.min(500, ((Number) offset).intValue())) : 34;
         Object seconds = values.get("doorbellSeconds");
         doorbellSeconds = seconds instanceof Number ? Math.max(5, Math.min(60, ((Number) seconds).intValue())) : 20;
 
@@ -314,10 +327,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private boolean fotooActive() {
-        // Exact for the real Android screensaver. The background fallback is
-        // what lets manual Fotoo app launches work on the user's AOSP build,
-        // where UsageStats reports the foreground as unknown.
-        return dreaming || !kioskForeground;
+        return dreaming || manualFotoo;
     }
 
     private void updatePresentation() {
@@ -389,7 +399,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         int width = Math.min(dp(700), Math.max(dp(300), context.getResources().getDisplayMetrics().widthPixels - dp(32)));
         WindowManager.LayoutParams params = overlayParams(width, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.gravity = ("Top".equals(nowPlayingPosition) ? Gravity.TOP : Gravity.BOTTOM) | Gravity.CENTER_HORIZONTAL;
-        params.y = dp(34);
+        params.y = dp(nowPlayingOffset);
 
         try {
             windowManager.addView(card, params);
@@ -514,7 +524,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.4 test");
+        test.setText("Fotoo Overlay 0.5 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
