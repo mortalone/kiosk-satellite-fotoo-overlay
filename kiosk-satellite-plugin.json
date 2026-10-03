@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
   "description": "Native Android overlays above Fotoo with configurable Now Playing progress, playlist/next-track metadata and persistent doorbell camera test mode.",
@@ -49,7 +49,7 @@
       "default": 34,
       "min": 0,
       "max": 500,
-      "step": 5,
+      "step": 1,
       "unit": "dp",
       "group": "Now Playing",
       "description": "Distance from the selected top or bottom edge. Increase this to avoid Fotoo's clock or other overlays."
