@@ -1,55 +1,29 @@
 # Fotoo Overlay for Kiosk Satellite
 
-Native Android overlays above Fotoo while Fotoo is running as Android's real DreamService/screensaver.
+Native Android system overlays above Fotoo while Fotoo runs as the Android screensaver.
 
-## Version 0.2
+## 0.7.0
 
-The proof of concept succeeded on the Raspberry Pi 4 / Android 14 panel: a real
-`TYPE_APPLICATION_OVERLAY` remains visible above Fotoo.
+- Now Playing and doorbell camera can be visible at the same time.
+- Two independent doorbell triggers can show the same camera.
+- Separate opacity controls for Now Playing and the camera.
+- Progress bar and elapsed/remaining time.
+- Optional playlist/source and next-track fields.
+- Persistent camera test mode for setup without pressing the real doorbell.
+- Best-effort attachment when Fotoo was already running before the plugin started.
 
-Version 0.2 changes the behavior so there is **no permanent overlay before
-Fotoo starts**. The plugin listens for Android's dreaming start/stop broadcasts
-and creates overlays only while a DreamService is active.
+Recommended door triggers for this installation:
 
-### Now Playing
+- Trigger 1: `binary_sensor.doorbellcamera_person_occupancy`
+- Trigger 2: `binary_sensor.reolink_video_doorbell_wifi_visitor`
 
-Choose a Home Assistant `media_player` entity in the plugin settings. While
-Fotoo is running and the player is playing (or paused, when enabled), the
-plugin shows:
+## Install
 
-- album artwork from `entity_picture`
-- title
-- artist
-- album
+Use Kiosk Satellite **Plugin Manager -> Add plugin** and paste:
 
-The card disappears automatically when Fotoo exits.
+`https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
 
-### Doorbell
+Kiosk Satellite discovers the latest stable GitHub release and verifies the
+release assets.
 
-Choose:
-
-- a doorbell/visitor trigger entity
-- a camera entity
-- display duration
-
-A binary sensor triggers when it changes to `on`. An `event.*` entity
-triggers whenever it receives a new event state. While Fotoo is active, the
-camera overlay temporarily takes priority over Now Playing and refreshes the
-camera entity's `entity_picture` about once per second.
-
-## Install developer build
-
-Build with GitHub Actions, download the `fotoo-overlay` workflow artifact,
-extract it, then install `fotoo-system-overlay-poc-0.2.0.zip` through:
-
-**Kiosk Satellite -> Plugin Manager -> Developer Tools -> Install from ZIP**
-
-Kiosk Satellite must have **Display over other apps** permission.
-
-## First test
-
-Configure only **Now Playing entity** first, for example
-`media_player.drivhus`. Start music and let Android enter Fotoo normally.
-The card should appear only after Fotoo starts and disappear when Fotoo ends.
-
-Then configure the doorbell entities.
+For local development only, **Install from ZIP** can still be used.

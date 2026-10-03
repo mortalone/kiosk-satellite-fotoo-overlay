@@ -3,6 +3,7 @@ package me.jxl.kiosk.plugins.fotoooverlay;
 
 import android.app.Application;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -67,21 +68,25 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private Application.ActivityLifecycleCallbacks lifecycleCallbacks;
     private boolean dreaming;
     private boolean manualFotoo;
+    private boolean inferredFotoo;
 
     private final Set<String> subscribedEntities = new HashSet<>();
     private String nowPlayingEntity = "";
     private String playlistEntity = "";
     private String nextTrackEntity = "";
     private String doorbellEntity = "";
+    private String doorbellEntity2 = "";
     private String doorbellCameraEntity = "";
     private boolean showPaused = true;
     private String nowPlayingPosition = "Bottom";
     private int nowPlayingOffset = 34;
+    private int nowPlayingOpacity = 90;
     private boolean showProgress = true;
     private String timeLabels = "Elapsed / remaining";
     private boolean showPlaylist = false;
     private boolean showNextTrack = false;
     private int doorbellSeconds = 20;
+    private int cameraOpacity = 100;
     private boolean cameraTestMode = false;
 
     private String haBaseUrl;
@@ -92,6 +97,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private Map<?, ?> cameraAttributes = Collections.emptyMap();
     private String lastDoorbellState;
     private boolean doorbellInitialSeen;
+    private String lastDoorbellState2;
+    private boolean doorbellInitialSeen2;
 
     private View nowPlayingView;
     private ImageView mediaImage;
@@ -158,6 +165,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         registerActivityLifecycle();
         applySettings(settings);
         readHomeAssistantBaseUrl();
+        main.postDelayed(this::detectAlreadyRunningFotoo, 800);
         host.status("Ready. Fotoo DreamService is automatic. Use the 'Open Fotoo with overlay' action for manual app mode.", false);
     }
 
@@ -225,6 +233,19 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             lastDoorbellState = state;
             if (trigger && fotooActive()) main.post(this::showDoorbell);
         }
+
+        if (entityId.equals(doorbellEntity2)) {
+            boolean trigger = false;
+            if (!doorbellInitialSeen2) {
+                doorbellInitialSeen2 = true;
+            } else if (doorbellEntity2.startsWith("event.")) {
+                trigger = !Objects.equals(lastDoorbellState2, state);
+            } else {
+                trigger = "on".equalsIgnoreCase(state) && !"on".equalsIgnoreCase(lastDoorbellState2);
+            }
+            lastDoorbellState2 = state;
+            if (trigger && fotooActive()) main.post(this::showDoorbell);
+        }
     }
 
     @Override
@@ -284,8 +305,9 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             @Override public void onActivityStarted(Activity activity) {}
             @Override public void onActivityResumed(Activity activity) {
                 if (!activity.getPackageName().equals(context.getPackageName())) return;
-                if (manualFotoo) {
+                if (manualFotoo || inferredFotoo) {
                     manualFotoo = false;
+                    inferredFotoo = false;
                     updatePresentation();
                 }
             }
@@ -295,6 +317,36 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             @Override public void onActivityDestroyed(Activity activity) {}
         };
         application.registerActivityLifecycleCallbacks(lifecycleCallbacks);
+    }
+
+    private void detectAlreadyRunningFotoo() {
+        if (context == null || dreaming || manualFotoo || inferredFotoo) return;
+        try {
+            ActivityManager manager =
+                    (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (manager == null) return;
+            java.util.List<ActivityManager.RunningAppProcessInfo> processes =
+                    manager.getRunningAppProcesses();
+            if (processes == null) return;
+            for (ActivityManager.RunningAppProcessInfo process : processes) {
+                boolean fotoo = FOTOO_PACKAGE.equals(process.processName);
+                if (!fotoo && process.pkgList != null) {
+                    for (String pkg : process.pkgList) {
+                        if (FOTOO_PACKAGE.equals(pkg)) {
+                            fotoo = true;
+                            break;
+                        }
+                    }
+                }
+                if (fotoo && process.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE) {
+                    inferredFotoo = true;
+                    updatePresentation();
+                    host.status("Attached to an already-running Fotoo session.", false);
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private void openFotoo() {
@@ -320,6 +372,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         String nextPlaylistEntity = stringSetting(values, "playlistEntity");
         String nextNextTrackEntity = stringSetting(values, "nextTrackEntity");
         String nextDoorbell = stringSetting(values, "doorbellEntity");
+        String nextDoorbell2 = stringSetting(values, "doorbellEntity2");
         String nextCamera = stringSetting(values, "doorbellCameraEntity");
 
         Set<String> wanted = new HashSet<>();
@@ -327,6 +380,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (!nextPlaylistEntity.isEmpty()) wanted.add(nextPlaylistEntity);
         if (!nextNextTrackEntity.isEmpty()) wanted.add(nextNextTrackEntity);
         if (!nextDoorbell.isEmpty()) wanted.add(nextDoorbell);
+        if (!nextDoorbell2.isEmpty()) wanted.add(nextDoorbell2);
         if (!nextCamera.isEmpty()) wanted.add(nextCamera);
 
         for (String old : new HashSet<>(subscribedEntities)) {
@@ -343,11 +397,14 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         playlistEntity = nextPlaylistEntity;
         nextTrackEntity = nextNextTrackEntity;
         doorbellEntity = nextDoorbell;
+        doorbellEntity2 = nextDoorbell2;
         doorbellCameraEntity = nextCamera;
         showPaused = Boolean.TRUE.equals(values.get("showPaused"));
         nowPlayingPosition = "Top".equals(values.get("nowPlayingPosition")) ? "Top" : "Bottom";
         Object offset = values.get("nowPlayingOffset");
         nowPlayingOffset = offset instanceof Number ? Math.max(0, Math.min(500, ((Number) offset).intValue())) : 34;
+        Object npOpacity = values.get("nowPlayingOpacity");
+        nowPlayingOpacity = npOpacity instanceof Number ? Math.max(10, Math.min(100, ((Number) npOpacity).intValue())) : 90;
         showProgress = values.get("showProgress") == null || Boolean.TRUE.equals(values.get("showProgress"));
         String labels = stringSetting(values, "timeLabels");
         timeLabels = labels.isEmpty() ? "Elapsed / remaining" : labels;
@@ -355,10 +412,17 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         showNextTrack = Boolean.TRUE.equals(values.get("showNextTrack"));
         Object seconds = values.get("doorbellSeconds");
         doorbellSeconds = seconds instanceof Number ? Math.max(5, Math.min(60, ((Number) seconds).intValue())) : 20;
+        Object camOpacity = values.get("cameraOpacity");
+        cameraOpacity = camOpacity instanceof Number ? Math.max(10, Math.min(100, ((Number) camOpacity).intValue())) : 100;
         cameraTestMode = Boolean.TRUE.equals(values.get("cameraTestMode"));
+
+        if (nowPlayingView != null) nowPlayingView.setAlpha(nowPlayingOpacity / 100f);
+        if (doorbellView != null) doorbellView.setAlpha(cameraOpacity / 100f);
 
         doorbellInitialSeen = false;
         lastDoorbellState = null;
+        doorbellInitialSeen2 = false;
+        lastDoorbellState2 = null;
         loadedMediaPicture = null;
         main.post(this::updatePresentation);
     }
@@ -373,7 +437,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private boolean fotooActive() {
-        return dreaming || manualFotoo;
+        return dreaming || manualFotoo || inferredFotoo;
     }
 
     private void updatePresentation() {
@@ -384,14 +448,12 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         }
         if (cameraTestMode && !doorbellCameraEntity.isEmpty()) {
             showDoorbell();
-            return;
         }
-        if (!cameraTestMode && doorbellView != null) hideDoorbell();
         updateNowPlaying();
     }
 
     private void updateNowPlaying() {
-        if (!fotooActive() || doorbellView != null || nowPlayingEntity.isEmpty() || !mediaVisible()) {
+        if (!fotooActive() || nowPlayingEntity.isEmpty() || !mediaVisible()) {
             hideNowPlaying();
             return;
         }
@@ -494,6 +556,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         int pad = dp(16);
         card.setPadding(pad, pad, pad, pad);
         card.setBackground(cardBackground(0xE6212226, 20));
+        card.setAlpha(nowPlayingOpacity / 100f);
 
         mediaImage = new ImageView(context);
         mediaImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -560,13 +623,13 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private void showDoorbell() {
         if (!fotooActive() || context == null || windowManager == null) return;
-        hideNowPlaying();
         main.removeCallbacks(hideDoorbellTask);
         main.removeCallbacks(cameraRefreshTask);
 
         if (doorbellView == null) {
             FrameLayout frame = new FrameLayout(context);
             frame.setBackground(cardBackground(0xF0151517, 22));
+            frame.setAlpha(cameraOpacity / 100f);
 
             doorbellImage = new ImageView(context);
             doorbellImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -669,7 +732,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.6 test");
+        test.setText("Fotoo Overlay 0.7 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(

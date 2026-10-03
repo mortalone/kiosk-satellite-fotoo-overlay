@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo with configurable Now Playing progress, playlist/next-track metadata and persistent doorbell camera test mode.",
+  "description": "Native Android overlays above Fotoo with simultaneous Now Playing and doorbell camera, dual triggers, per-overlay opacity, progress, playlist/next-track metadata and camera test mode.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
@@ -53,6 +53,18 @@
       "unit": "dp",
       "group": "Now Playing",
       "description": "Distance from the selected top or bottom edge. Increase this to avoid Fotoo's clock or other overlays."
+    },
+    {
+      "key": "nowPlayingOpacity",
+      "type": "number",
+      "title": "Now Playing opacity",
+      "default": 90,
+      "min": 10,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "group": "Now Playing",
+      "description": "Opacity of the complete Now Playing overlay."
     },
     {
       "key": "showProgress",
@@ -111,10 +123,18 @@
     {
       "key": "doorbellEntity",
       "type": "entity",
-      "title": "Doorbell trigger entity",
+      "title": "Trigger 1",
       "default": "",
       "group": "Doorbell",
-      "description": "Choose a visitor/doorbell binary_sensor. An event entity is also supported and triggers on each new event state."
+      "description": "Primary trigger, for example a Frigate person occupancy binary_sensor."
+    },
+    {
+      "key": "doorbellEntity2",
+      "type": "entity",
+      "title": "Trigger 2",
+      "default": "",
+      "group": "Doorbell",
+      "description": "Secondary trigger, for example the Reolink visitor/ring-button binary_sensor. Either trigger shows the same camera."
     },
     {
       "key": "doorbellCameraEntity",
@@ -123,6 +143,18 @@
       "default": "",
       "group": "Doorbell",
       "description": "Choose the Home Assistant camera entity whose entity_picture should be shown when the doorbell rings."
+    },
+    {
+      "key": "cameraOpacity",
+      "type": "number",
+      "title": "Camera opacity",
+      "default": 100,
+      "min": 10,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "group": "Doorbell",
+      "description": "Opacity of the complete doorbell camera overlay."
     },
     {
       "key": "doorbellSeconds",
