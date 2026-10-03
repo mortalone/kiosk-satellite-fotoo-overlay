@@ -38,6 +38,7 @@ import java.net.URLConnection;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -69,6 +70,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private boolean dreaming;
     private boolean manualFotoo;
     private boolean inferredFotoo;
+    private boolean forceOverlayPreview;
 
     private final Set<String> subscribedEntities = new HashSet<>();
     private String nowPlayingEntity = "";
@@ -305,11 +307,11 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             @Override public void onActivityStarted(Activity activity) {}
             @Override public void onActivityResumed(Activity activity) {
                 if (!activity.getPackageName().equals(context.getPackageName())) return;
-                if (manualFotoo || inferredFotoo) {
-                    manualFotoo = false;
-                    inferredFotoo = false;
-                    updatePresentation();
-                }
+                boolean changed = manualFotoo || inferredFotoo || forceOverlayPreview;
+                manualFotoo = false;
+                inferredFotoo = false;
+                if (forceOverlayPreview) clearForcePreviewSetting();
+                if (changed) updatePresentation();
             }
             @Override public void onActivityPaused(Activity activity) {}
             @Override public void onActivityStopped(Activity activity) {}
@@ -415,6 +417,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         Object camOpacity = values.get("cameraOpacity");
         cameraOpacity = camOpacity instanceof Number ? Math.max(10, Math.min(100, ((Number) camOpacity).intValue())) : 100;
         cameraTestMode = Boolean.TRUE.equals(values.get("cameraTestMode"));
+        forceOverlayPreview = Boolean.TRUE.equals(values.get("forceOverlayPreview"));
 
         if (nowPlayingView != null) nowPlayingView.setAlpha(nowPlayingOpacity / 100f);
         if (doorbellView != null) doorbellView.setAlpha(cameraOpacity / 100f);
@@ -437,7 +440,19 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private boolean fotooActive() {
-        return dreaming || manualFotoo || inferredFotoo;
+        return dreaming || manualFotoo || inferredFotoo || forceOverlayPreview;
+    }
+
+    private void clearForcePreviewSetting() {
+        forceOverlayPreview = false;
+        if (settings == null || host == null) return;
+        try {
+            Map<String, Object> next = new HashMap<>(settings);
+            next.put("forceOverlayPreview", false);
+            settings = next;
+            host.saveSettings(next);
+        } catch (Throwable ignored) {
+        }
     }
 
     private void updatePresentation() {
@@ -732,7 +747,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.7 test");
+        test.setText("Fotoo Overlay 0.7.1 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(

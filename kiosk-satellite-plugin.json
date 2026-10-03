@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo with simultaneous Now Playing and doorbell camera, dual triggers, per-overlay opacity, progress, playlist/next-track metadata and camera test mode.",
+  "description": "Native Android overlays above Fotoo with simultaneous Now Playing and doorbell camera, dual triggers, per-overlay opacity, progress, playlist/next-track metadata, camera test mode and instant attach/test mode.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
@@ -175,6 +175,14 @@
       "default": false,
       "group": "Doorbell",
       "description": "Keep the selected doorbell camera visible for the whole Fotoo session, without pressing the real doorbell. Turn this off after testing."
+    },
+    {
+      "key": "forceOverlayPreview",
+      "type": "boolean",
+      "title": "Attach / show overlays now",
+      "default": false,
+      "group": "Testing",
+      "description": "Use from Remote Admin when Fotoo is already running and the plugin missed the DreamService start event. Forces the overlays visible immediately. It is automatically cleared when Kiosk Satellite returns to the foreground."
     }
   ],
   "commands": [
@@ -197,6 +205,9 @@
     },
     {
       "title": "Doorbell"
+    },
+    {
+      "title": "Testing"
     }
   ]
 }
