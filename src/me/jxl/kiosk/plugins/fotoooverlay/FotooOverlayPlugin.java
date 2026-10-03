@@ -570,7 +570,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         card.setGravity(Gravity.CENTER_VERTICAL);
         int pad = dp(16);
         card.setPadding(pad, pad, pad, pad);
-        card.setBackground(cardBackground(0xE6212226, 20));
+        card.setBackground(cardBackground(0xFF212226, 20));
         card.setAlpha(nowPlayingOpacity / 100f);
 
         mediaImage = new ImageView(context);
@@ -643,7 +643,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
         if (doorbellView == null) {
             FrameLayout frame = new FrameLayout(context);
-            frame.setBackground(cardBackground(0xF0151517, 22));
+            frame.setBackground(cardBackground(0xFF151517, 22));
             frame.setAlpha(cameraOpacity / 100f);
 
             doorbellImage = new ImageView(context);
@@ -655,7 +655,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             doorbellLabel.setText(cameraTestMode ? "Dørklokke – TEST" : "Dørklokke");
             TextView label = doorbellLabel;
             label.setPadding(dp(14), dp(10), dp(14), dp(10));
-            label.setBackground(cardBackground(0xB0000000, 14));
+            label.setBackground(cardBackground(0xE6000000, 14));
             FrameLayout.LayoutParams labelParams = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             labelParams.gravity = Gravity.TOP | Gravity.START;
@@ -747,7 +747,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.7.1 test");
+        test.setText("Fotoo Overlay 0.7.2 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(

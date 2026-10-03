@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo with simultaneous Now Playing and doorbell camera, dual triggers, per-overlay opacity, progress, playlist/next-track metadata, camera test mode and instant attach/test mode.",
+  "description": "Native Android overlays above Fotoo with simultaneous Now Playing and doorbell camera, dual triggers, true 0-100% per-overlay opacity, progress, playlist/next-track metadata, camera test mode and instant attach/test mode.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
@@ -64,7 +64,7 @@
       "step": 5,
       "unit": "%",
       "group": "Now Playing",
-      "description": "Opacity of the complete Now Playing overlay."
+      "description": "Opacity of the complete Now Playing overlay. 100% is fully opaque."
     },
     {
       "key": "showProgress",
@@ -154,7 +154,7 @@
       "step": 5,
       "unit": "%",
       "group": "Doorbell",
-      "description": "Opacity of the complete doorbell camera overlay."
+      "description": "Opacity of the complete doorbell camera overlay. 100% is fully opaque."
     },
     {
       "key": "doorbellSeconds",
