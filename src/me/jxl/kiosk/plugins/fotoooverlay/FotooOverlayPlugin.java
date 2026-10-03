@@ -25,6 +25,7 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import java.io.InputStream;
@@ -33,6 +34,7 @@ import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -68,16 +70,25 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private final Set<String> subscribedEntities = new HashSet<>();
     private String nowPlayingEntity = "";
+    private String playlistEntity = "";
+    private String nextTrackEntity = "";
     private String doorbellEntity = "";
     private String doorbellCameraEntity = "";
     private boolean showPaused = true;
     private String nowPlayingPosition = "Bottom";
     private int nowPlayingOffset = 34;
+    private boolean showProgress = true;
+    private String timeLabels = "Elapsed / remaining";
+    private boolean showPlaylist = false;
+    private boolean showNextTrack = false;
     private int doorbellSeconds = 20;
+    private boolean cameraTestMode = false;
 
     private String haBaseUrl;
     private String mediaState;
     private Map<?, ?> mediaAttributes = Collections.emptyMap();
+    private String playlistState = "";
+    private String nextTrackState = "";
     private Map<?, ?> cameraAttributes = Collections.emptyMap();
     private String lastDoorbellState;
     private boolean doorbellInitialSeen;
@@ -87,12 +98,25 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private TextView mediaTitle;
     private TextView mediaArtist;
     private TextView mediaAlbum;
+    private TextView mediaPlaylist;
+    private TextView mediaNext;
+    private ProgressBar mediaProgress;
+    private TextView mediaTime;
     private String loadedMediaPicture;
     private boolean mediaFetchPending;
 
     private View doorbellView;
     private ImageView doorbellImage;
+    private TextView doorbellLabel;
     private boolean cameraFetchPending;
+
+    private final Runnable progressTickTask = new Runnable() {
+        @Override public void run() {
+            if (nowPlayingView == null) return;
+            updateProgress();
+            main.postDelayed(this, 1000);
+        }
+    };
 
     private final Runnable hideDoorbellTask = new Runnable() {
         @Override public void run() {
@@ -171,6 +195,16 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (entityId.equals(nowPlayingEntity)) {
             mediaState = state;
             mediaAttributes = attrs;
+            main.post(this::updateNowPlaying);
+        }
+
+        if (!playlistEntity.isEmpty() && entityId.equals(playlistEntity)) {
+            playlistState = state == null ? "" : state;
+            main.post(this::updateNowPlaying);
+        }
+
+        if (!nextTrackEntity.isEmpty() && entityId.equals(nextTrackEntity)) {
+            nextTrackState = state == null ? "" : state;
             main.post(this::updateNowPlaying);
         }
 
@@ -283,11 +317,15 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private void applySettings(Map<String, Object> values) {
         String nextNow = stringSetting(values, "nowPlayingEntity");
+        String nextPlaylistEntity = stringSetting(values, "playlistEntity");
+        String nextNextTrackEntity = stringSetting(values, "nextTrackEntity");
         String nextDoorbell = stringSetting(values, "doorbellEntity");
         String nextCamera = stringSetting(values, "doorbellCameraEntity");
 
         Set<String> wanted = new HashSet<>();
         if (!nextNow.isEmpty()) wanted.add(nextNow);
+        if (!nextPlaylistEntity.isEmpty()) wanted.add(nextPlaylistEntity);
+        if (!nextNextTrackEntity.isEmpty()) wanted.add(nextNextTrackEntity);
         if (!nextDoorbell.isEmpty()) wanted.add(nextDoorbell);
         if (!nextCamera.isEmpty()) wanted.add(nextCamera);
 
@@ -302,19 +340,27 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         }
 
         nowPlayingEntity = nextNow;
+        playlistEntity = nextPlaylistEntity;
+        nextTrackEntity = nextNextTrackEntity;
         doorbellEntity = nextDoorbell;
         doorbellCameraEntity = nextCamera;
         showPaused = Boolean.TRUE.equals(values.get("showPaused"));
         nowPlayingPosition = "Top".equals(values.get("nowPlayingPosition")) ? "Top" : "Bottom";
         Object offset = values.get("nowPlayingOffset");
         nowPlayingOffset = offset instanceof Number ? Math.max(0, Math.min(500, ((Number) offset).intValue())) : 34;
+        showProgress = values.get("showProgress") == null || Boolean.TRUE.equals(values.get("showProgress"));
+        String labels = stringSetting(values, "timeLabels");
+        timeLabels = labels.isEmpty() ? "Elapsed / remaining" : labels;
+        showPlaylist = Boolean.TRUE.equals(values.get("showPlaylist"));
+        showNextTrack = Boolean.TRUE.equals(values.get("showNextTrack"));
         Object seconds = values.get("doorbellSeconds");
         doorbellSeconds = seconds instanceof Number ? Math.max(5, Math.min(60, ((Number) seconds).intValue())) : 20;
+        cameraTestMode = Boolean.TRUE.equals(values.get("cameraTestMode"));
 
         doorbellInitialSeen = false;
         lastDoorbellState = null;
         loadedMediaPicture = null;
-        main.post(this::updateNowPlaying);
+        main.post(this::updatePresentation);
     }
 
     private void readHomeAssistantBaseUrl() {
@@ -336,6 +382,11 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             hideNowPlaying();
             return;
         }
+        if (cameraTestMode && !doorbellCameraEntity.isEmpty()) {
+            showDoorbell();
+            return;
+        }
+        if (!cameraTestMode && doorbellView != null) hideDoorbell();
         updateNowPlaying();
     }
 
@@ -356,12 +407,77 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         mediaAlbum.setText(album);
         mediaAlbum.setVisibility(album.isEmpty() ? View.GONE : View.VISIBLE);
 
+        String playlist = playlistState;
+        if (playlist.isEmpty() || "unknown".equalsIgnoreCase(playlist) || "unavailable".equalsIgnoreCase(playlist)) {
+            playlist = firstAttr(mediaAttributes,
+                    "media_playlist", "playlist_name", "playlist", "source");
+        }
+        mediaPlaylist.setText(playlist.isEmpty() ? "" : "Playlist: " + playlist);
+        mediaPlaylist.setVisibility(showPlaylist && !playlist.isEmpty() ? View.VISIBLE : View.GONE);
+
+        String next = nextTrackState;
+        if (next.isEmpty() || "unknown".equalsIgnoreCase(next) || "unavailable".equalsIgnoreCase(next)) {
+            next = firstAttr(mediaAttributes,
+                    "next_track", "next_title", "media_next_track", "queue_next");
+        }
+        mediaNext.setText(next.isEmpty() ? "" : "Næste: " + next);
+        mediaNext.setVisibility(showNextTrack && !next.isEmpty() ? View.VISIBLE : View.GONE);
+
+        updateProgress();
+
         String picture = attr(mediaAttributes, "entity_picture", "");
         if (!picture.equals(loadedMediaPicture)) {
             loadedMediaPicture = picture;
             mediaImage.setImageDrawable(null);
             if (!picture.isEmpty()) fetchMediaImage(picture);
         }
+    }
+
+    private void updateProgress() {
+        if (mediaProgress == null || mediaTime == null) return;
+
+        double duration = numberAttr(mediaAttributes, "media_duration", 0);
+        double position = numberAttr(mediaAttributes, "media_position", 0);
+        String updated = attr(mediaAttributes, "media_position_updated_at", "");
+
+        if ("playing".equalsIgnoreCase(mediaState) && !updated.isEmpty()) {
+            try {
+                long updatedMs = Instant.parse(updated).toEpochMilli();
+                position += Math.max(0, System.currentTimeMillis() - updatedMs) / 1000.0;
+            } catch (Throwable ignored) {}
+        }
+
+        if (duration > 0) position = Math.max(0, Math.min(duration, position));
+        boolean haveTimeline = duration > 0;
+        mediaProgress.setVisibility(showProgress && haveTimeline ? View.VISIBLE : View.GONE);
+        if (haveTimeline) {
+            mediaProgress.setProgress((int) Math.round((position / duration) * 1000.0));
+        }
+
+        String label = "";
+        if (!"Off".equals(timeLabels) && haveTimeline) {
+            long elapsed = Math.max(0, Math.round(position));
+            long total = Math.max(0, Math.round(duration));
+            long remaining = Math.max(0, total - elapsed);
+            if ("Elapsed / total".equals(timeLabels)) {
+                label = formatTime(elapsed) + " / " + formatTime(total);
+            } else if ("Remaining only".equals(timeLabels)) {
+                label = "-" + formatTime(remaining);
+            } else {
+                label = formatTime(elapsed) + " / -" + formatTime(remaining);
+            }
+        }
+        mediaTime.setText(label);
+        mediaTime.setVisibility(label.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    private static String formatTime(long seconds) {
+        long h = seconds / 3600;
+        long m = (seconds % 3600) / 60;
+        long s = seconds % 60;
+        return h > 0
+                ? String.format(java.util.Locale.ROOT, "%d:%02d:%02d", h, m, s)
+                : String.format(java.util.Locale.ROOT, "%d:%02d", m, s);
     }
 
     private boolean mediaVisible() {
@@ -391,9 +507,24 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         mediaTitle = textView(21, true, Color.WHITE);
         mediaArtist = textView(17, false, 0xFFE7E7E7);
         mediaAlbum = textView(14, false, 0xFFBDBDBD);
+        mediaPlaylist = textView(13, false, 0xFFBDBDBD);
+        mediaNext = textView(13, false, 0xFFD8D8D8);
+        mediaProgress = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
+        mediaProgress.setMax(1000);
+        mediaTime = textView(12, false, 0xFFBDBDBD);
+
         text.addView(mediaTitle);
         text.addView(mediaArtist);
         text.addView(mediaAlbum);
+        text.addView(mediaPlaylist);
+        text.addView(mediaNext);
+
+        LinearLayout.LayoutParams progressParams =
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(10));
+        progressParams.topMargin = dp(8);
+        text.addView(mediaProgress, progressParams);
+        text.addView(mediaTime);
+
         card.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         int width = Math.min(dp(700), Math.max(dp(300), context.getResources().getDisplayMetrics().widthPixels - dp(32)));
@@ -404,6 +535,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         try {
             windowManager.addView(card, params);
             nowPlayingView = card;
+            main.removeCallbacks(progressTickTask);
+            main.post(progressTickTask);
         } catch (Throwable error) {
             host.status("Now Playing overlay failed: " + safeMessage(error), true);
         }
@@ -440,8 +573,9 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             frame.addView(doorbellImage, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-            TextView label = textView(18, true, Color.WHITE);
-            label.setText("Dørklokke");
+            doorbellLabel = textView(18, true, Color.WHITE);
+            doorbellLabel.setText(cameraTestMode ? "Dørklokke – TEST" : "Dørklokke");
+            TextView label = doorbellLabel;
             label.setPadding(dp(14), dp(10), dp(14), dp(10));
             label.setBackground(cardBackground(0xB0000000, 14));
             FrameLayout.LayoutParams labelParams = new FrameLayout.LayoutParams(
@@ -465,9 +599,14 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             }
         }
 
+        if (doorbellLabel != null) {
+            doorbellLabel.setText(cameraTestMode ? "Dørklokke – TEST" : "Dørklokke");
+        }
         refreshDoorbellImage();
         main.post(cameraRefreshTask);
-        main.postDelayed(hideDoorbellTask, doorbellSeconds * 1000L);
+        if (!cameraTestMode) {
+            main.postDelayed(hideDoorbellTask, doorbellSeconds * 1000L);
+        }
     }
 
     private void refreshDoorbellImage() {
@@ -498,6 +637,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         View view = doorbellView;
         doorbellView = null;
         doorbellImage = null;
+        doorbellLabel = null;
         cameraFetchPending = false;
         if (view != null && windowManager != null) {
             try { windowManager.removeViewImmediate(view); } catch (Throwable ignored) {}
@@ -509,12 +649,17 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private void hideNowPlayingImmediate() {
+        main.removeCallbacks(progressTickTask);
         View view = nowPlayingView;
         nowPlayingView = null;
         mediaImage = null;
         mediaTitle = null;
         mediaArtist = null;
         mediaAlbum = null;
+        mediaPlaylist = null;
+        mediaNext = null;
+        mediaProgress = null;
+        mediaTime = null;
         mediaFetchPending = false;
         if (view != null && windowManager != null) {
             try { windowManager.removeViewImmediate(view); } catch (Throwable ignored) {}
@@ -524,7 +669,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.5 test");
+        test.setText("Fotoo Overlay 0.6 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
@@ -608,6 +753,25 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (value == null) return fallback;
         String text = String.valueOf(value);
         return "null".equals(text) ? fallback : text;
+    }
+
+    private static String firstAttr(Map<?, ?> attributes, String... keys) {
+        for (String key : keys) {
+            String value = attr(attributes, key, "");
+            if (!value.isEmpty() && !"unknown".equalsIgnoreCase(value) &&
+                    !"unavailable".equalsIgnoreCase(value)) return value;
+        }
+        return "";
+    }
+
+    private static double numberAttr(Map<?, ?> attributes, String key, double fallback) {
+        Object value = attributes == null ? null : attributes.get(key);
+        if (value instanceof Number) return ((Number) value).doubleValue();
+        if (value != null) {
+            try { return Double.parseDouble(String.valueOf(value)); }
+            catch (Throwable ignored) {}
+        }
+        return fallback;
     }
 
     private static String stringSetting(Map<String, Object> values, String key) {
