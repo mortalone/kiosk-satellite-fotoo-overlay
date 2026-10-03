@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "fotoo-system-overlay-poc",
+  "name": "Fotoo System Overlay POC",
+  "version": "0.1.0",
+  "minAndroidSdk": 26,
+  "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
+  "description": "Proof of concept: draw a real Android TYPE_APPLICATION_OVERLAY from a Kiosk Satellite plugin so it remains visible above Fotoo's Android screensaver.",
+  "author": "Local Kiosk Satellite proof of concept",
+  "license": "MIT",
+  "capabilities": [
+    "overlay"
+  ],
+  "settings": [
+    {
+      "key": "showOnStart",
+      "type": "boolean",
+      "title": "Show test overlay when enabled",
+      "default": true,
+      "group": "Test",
+      "description": "Show the native Android overlay immediately when the plugin starts."
+    },
+    {
+      "key": "message",
+      "type": "string",
+      "title": "Test text",
+      "default": "KS native overlay test\nIf this stays visible over Fotoo, the approach works.",
+      "group": "Test",
+      "description": "Text shown in the proof-of-concept overlay."
+    }
+  ],
+  "commands": [
+    {
+      "id": "show",
+      "title": "Show system overlay"
+    },
+    {
+      "id": "hide",
+      "title": "Hide system overlay"
+    }
+  ],
+  "groups": [
+    {
+      "title": "Test"
+    }
+  ]
+}
