@@ -1,0 +1,30 @@
+name: Build developer ZIP
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+      - name: Install Android platform and D8
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build plugin
+        run: python3 tools/build.py --android-platform 35
+      - name: Upload installable developer ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: fotoo-system-overlay-poc
+          path: dist/fotoo-system-overlay-poc-0.1.0.zip
