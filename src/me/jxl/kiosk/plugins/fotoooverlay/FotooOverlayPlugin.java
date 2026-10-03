@@ -2,10 +2,7 @@
 package me.jxl.kiosk.plugins.fotoooverlay;
 
 import android.app.Application;
-import android.app.AppOpsManager;
-import android.app.usage.UsageEvents;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
+import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -19,7 +16,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Process;
+import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
@@ -39,7 +36,6 @@ import java.net.URLConnection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -49,7 +45,7 @@ import me.jxl.kiosk.plugins.KioskPlugin;
 import me.jxl.kiosk.plugins.PluginHost;
 
 /**
- * Native Android overlays shown while Fotoo is active, either as Android\n * DreamService/screensaver or as the foreground Fotoo app.
+ * Native Android overlays shown while Fotoo is active. DreamService mode\n * is detected exactly; ordinary-app mode uses the Kiosk Activity leaving\n * the foreground because this AOSP build does not report Fotoo through\n * UsageStats.
  *
  * The public KS SDK does not currently expose an Android Context. This plugin
  * therefore obtains the application Context with a small reflection fallback.
@@ -63,12 +59,12 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private ExecutorService io;
-    private static final String FOTOO_PACKAGE = "com.bo.fotoo";
     private BroadcastReceiver dreamReceiver;
+    private Application application;
+    private Application.ActivityLifecycleCallbacks lifecycleCallbacks;
     private boolean dreaming;
-    private boolean fotooForeground;
-    private String lastForegroundPackage = "";
-    private long usageCursor;
+    private boolean kioskForeground = true;
+    private int lifecycleGeneration;
 
     private final Set<String> subscribedEntities = new HashSet<>();
     private String nowPlayingEntity = "";
@@ -96,18 +92,6 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private View doorbellView;
     private ImageView doorbellImage;
     private boolean cameraFetchPending;
-
-    private final Runnable foregroundProbeTask = new Runnable() {
-        @Override public void run() {
-            if (context == null) return;
-            boolean next = isFotooForeground();
-            if (next != fotooForeground) {
-                fotooForeground = next;
-                updatePresentation();
-            }
-            main.postDelayed(this, 1000);
-        }
-    };
 
     private final Runnable hideDoorbellTask = new Runnable() {
         @Override public void run() {
@@ -146,13 +130,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         });
 
         registerDreamReceiver();
+        registerActivityLifecycle();
         applySettings(settings);
         readHomeAssistantBaseUrl();
-        main.post(foregroundProbeTask);
-        host.status(hasUsageAccess()
-                ? "Ready. Fotoo is detected as DreamService or foreground app."
-                : "Ready for Fotoo DreamService. Grant Usage access to Kiosk Satellite to also detect Fotoo launched as an app.",
-                false);
+        host.status("Ready. DreamService is detected exactly; ordinary Fotoo app uses Kiosk background state.", false);
     }
 
     @Override
@@ -215,6 +196,11 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             try { context.unregisterReceiver(dreamReceiver); } catch (Throwable ignored) {}
         }
         dreamReceiver = null;
+        if (application != null && lifecycleCallbacks != null) {
+            try { application.unregisterActivityLifecycleCallbacks(lifecycleCallbacks); } catch (Throwable ignored) {}
+        }
+        lifecycleCallbacks = null;
+        application = null;
         main.removeCallbacksAndMessages(null);
         hideDoorbellImmediate();
         hideNowPlayingImmediate();
@@ -250,6 +236,38 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         } else {
             context.registerReceiver(dreamReceiver, filter);
         }
+    }
+
+    private void registerActivityLifecycle() {
+        Context appContext = context == null ? null : context.getApplicationContext();
+        if (!(appContext instanceof Application)) return;
+        application = (Application) appContext;
+        lifecycleCallbacks = new Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityCreated(Activity activity, Bundle state) {}
+            @Override public void onActivityStarted(Activity activity) {}
+            @Override public void onActivityResumed(Activity activity) {
+                if (!activity.getPackageName().equals(context.getPackageName())) return;
+                lifecycleGeneration++;
+                if (!kioskForeground) {
+                    kioskForeground = true;
+                    updatePresentation();
+                }
+            }
+            @Override public void onActivityPaused(Activity activity) {
+                if (!activity.getPackageName().equals(context.getPackageName())) return;
+                final int generation = ++lifecycleGeneration;
+                main.postDelayed(() -> {
+                    if (context != null && generation == lifecycleGeneration && kioskForeground) {
+                        kioskForeground = false;
+                        updatePresentation();
+                    }
+                }, 350);
+            }
+            @Override public void onActivityStopped(Activity activity) {}
+            @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
+            @Override public void onActivityDestroyed(Activity activity) {}
+        };
+        application.registerActivityLifecycleCallbacks(lifecycleCallbacks);
     }
 
     private void applySettings(Map<String, Object> values) {
@@ -296,7 +314,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private boolean fotooActive() {
-        return dreaming || fotooForeground;
+        // Exact for the real Android screensaver. The background fallback is
+        // what lets manual Fotoo app launches work on the user's AOSP build,
+        // where UsageStats reports the foreground as unknown.
+        return dreaming || !kioskForeground;
     }
 
     private void updatePresentation() {
@@ -306,66 +327,6 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             return;
         }
         updateNowPlaying();
-    }
-
-    private boolean hasUsageAccess() {
-        if (context == null || Build.VERSION.SDK_INT < 21) return true;
-        try {
-            AppOpsManager appOps = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
-            int mode = appOps.checkOpNoThrow(
-                    AppOpsManager.OPSTR_GET_USAGE_STATS,
-                    Process.myUid(),
-                    context.getPackageName());
-            return mode == AppOpsManager.MODE_ALLOWED;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private boolean isFotooForeground() {
-        if (context == null || !hasUsageAccess()) return false;
-        try {
-            UsageStatsManager manager =
-                    (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-            if (manager == null) return false;
-
-            long now = System.currentTimeMillis();
-            long from = usageCursor == 0 ? now - 5 * 60_000L : Math.max(0, usageCursor - 1000L);
-            UsageEvents events = manager.queryEvents(from, now);
-            UsageEvents.Event event = new UsageEvents.Event();
-            long newest = usageCursor;
-            while (events != null && events.hasNextEvent()) {
-                events.getNextEvent(event);
-                int type = event.getEventType();
-                if ((type == UsageEvents.Event.ACTIVITY_RESUMED
-                        || type == UsageEvents.Event.MOVE_TO_FOREGROUND)
-                        && event.getTimeStamp() >= newest) {
-                    newest = event.getTimeStamp();
-                    lastForegroundPackage = event.getPackageName();
-                }
-            }
-
-            // If the plugin starts after Fotoo was already opened and the
-            // event window contained nothing, seed the last package from the
-            // most recently used app. Subsequent probes use UsageEvents.
-            if (usageCursor == 0 && lastForegroundPackage.isEmpty()) {
-                List<UsageStats> stats = manager.queryUsageStats(
-                        UsageStatsManager.INTERVAL_DAILY, now - 24 * 60 * 60_000L, now);
-                long lastUsed = 0;
-                if (stats != null) {
-                    for (UsageStats stat : stats) {
-                        if (stat.getLastTimeUsed() >= lastUsed) {
-                            lastUsed = stat.getLastTimeUsed();
-                            lastForegroundPackage = stat.getPackageName();
-                        }
-                    }
-                }
-            }
-            usageCursor = Math.max(newest, now - 1000L);
-            return FOTOO_PACKAGE.equals(lastForegroundPackage);
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 
     private void updateNowPlaying() {
@@ -553,7 +514,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.3 test");
+        test.setText("Fotoo Overlay 0.4 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
