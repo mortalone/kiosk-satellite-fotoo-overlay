@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.3
+
+- Fixes Kiosk Satellite install/update failure caused by exceeding the
+  manifest limit of 20 settings.
+- Replaces two overlay-target booleans with one **Show overlays on** selector.
+- Moves camera test mode out of Settings and into two plugin actions:
+  **Show doorbell camera test** and **Hide doorbell camera test**.
+- Packages Nature Frame 0.7.0 with independent per-screen collection profiles.
+- Each Nature Frame profile now has its own Home Assistant device, collection
+  switches and Media Browser path.
+- Keeps the old Default/active media paths for backwards compatibility.
+
 ## 0.10.1
 
 - Extends the existing Now Playing and doorbell camera overlays to Kiosk
