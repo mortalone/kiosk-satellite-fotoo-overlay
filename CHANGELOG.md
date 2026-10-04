@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.1
+
+- Packages Nature Frame 0.8.1.
+- Fixes missing thumbnails on Lovelace selector tiles for private collections.
+- Private collection covers are now generated as stable local JPEG previews.
+- Screensaver Overlay behavior is unchanged.
+
 ## 0.11.0
 
 - Packages Nature Frame 0.8.0.
