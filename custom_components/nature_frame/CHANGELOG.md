@@ -1,5 +1,15 @@
 # Nature Frame changelog
 
+## 0.7.5
+
+- Fixes private collections not appearing in the Lovelace selector after images
+  are added.
+- Private collection contents are rescanned automatically.
+- Collection switch thumbnails and image_count attributes now use live catalog
+  data instead of the startup snapshot.
+- No Home Assistant restart is required just to add images to an existing
+  private collection such as Zoo · Private.
+
 ## 0.7.4
 
 - Gives virtual collections such as Kitchen · Mixed and Art · Misc their own
