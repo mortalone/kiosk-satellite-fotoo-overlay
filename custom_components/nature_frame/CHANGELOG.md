@@ -1,5 +1,15 @@
 # Nature Frame changelog
 
+## 0.7.3
+
+- Adds built-in fallback catalogues for Zoo · Public · Swainson and the three
+  Kitchen collections.
+- Public collection switches now still exist when the Wikimedia API cannot be
+  reached from Home Assistant during startup.
+- The normal Wikimedia API catalogue remains preferred and supplies the larger
+  collection when available.
+- Keeps per-screen profiles, Lovelace thumbnails and solid edge-color framing.
+
 ## 0.7.2
 
 - Adds solid edge-color framing for screen-profile playlists.
