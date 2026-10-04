@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.11.4
+
+- Fixes Now Playing cover art flicker and temporary blank covers.
+- The selected Home Assistant media_player's `entity_picture` is now the
+  preferred artwork source; Music Assistant artwork only fills gaps.
+- HA proxy token changes no longer trigger unnecessary artwork reloads.
+- The previous cover stays visible while a replacement is downloading and
+  swaps only after the new bitmap has decoded successfully.
+- Adds a small in-memory artwork cache and delayed clearing for brief metadata
+  gaps during track changes.
+- Kiosk Satellite's own screensavers now use an in-Activity overlay host when
+  possible. This avoids the Raspberry Pi hybrid-WebView z-order problem that
+  previously required **Legacy WebView renderer**.
+- Fotoo still uses the existing Android system-overlay path, preserving the
+  behavior that already works there.
+- Test overlay, Now Playing and doorbell camera all use the same adaptive
+  overlay host.
+
 ## 0.11.3
 
 - Replaces separate Doorbell **Camera width** and **Camera height** settings
