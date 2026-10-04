@@ -1,21 +1,38 @@
-# Fotoo Overlay for Kiosk Satellite
+# Screensaver Overlay for Kiosk Satellite
 
-Native Android system overlays above Fotoo while Fotoo runs as the Android
-screensaver. This repository also packages the **Nature Frame** Home Assistant
-integration.
+Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
+The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Repository release 0.9.0
+## Screensaver Overlay 0.10.1
 
-### Fotoo Overlay
+The plugin now listens to Kiosk Satellite's official `screensaver.state` and
+`screensaver.view` plugin events.
 
-The overlay plugin version is bumped to 0.9.0 as a packaging release so Kiosk
-Satellite and HACS can reference the same repository release. Overlay behavior
-is unchanged from 0.8.9.
+That means the existing custom overlays can run over Kiosk Satellite's own
+screensavers, including the Home Assistant Media/Nature Frame slideshow:
 
-### Nature Frame 0.6.0
+- the custom Now Playing card with artwork, title, artist, progress and the
+  existing optional playlist/next-track fields;
+- the doorbell/person camera overlay with the existing trigger and sizing
+  settings;
+- Fotoo remains supported independently.
 
-Nature Frame now provides curated, visually coherent collections rather than
-using broad topical scraping for named libraries:
+Two settings control where the overlays appear:
+
+- **Show on Kiosk Satellite screensavers** — enabled by default.
+- **Show on Fotoo** — enabled by default.
+
+Black/blank Kiosk Satellite screensavers are deliberately left untouched.
+
+The old **Attach / show overlays now** command remains available as a manual
+preview/fallback, but it is no longer needed for normal Kiosk Satellite
+screensaver operation.
+
+## Nature Frame 0.6.0
+
+This repository also packages the **Nature Frame** Home Assistant integration.
+
+Curated collections include:
 
 - Birds · Inky Bird Frame
 - Zoo · Public · Swainson
@@ -28,7 +45,7 @@ using broad topical scraping for named libraries:
 - existing mammal and astronomy collections
 
 Multiple collections can be enabled simultaneously using Home Assistant switch
-entities. The Active collections playlist is balanced per collection so huge
+entities. The Active collections playlist is balanced per collection so large
 libraries do not drown out small private albums.
 
 Private Zoo images belong in:
@@ -39,19 +56,18 @@ Nature Frame creates that folder automatically.
 
 ## Kiosk Satellite media setup
 
-Point the screensaver at the stable Nature Frame media source:
+Point the Kiosk Satellite screensaver at one of the stable Nature Frame sources:
 
 - `media-source://nature_frame/active/portrait`
 - `media-source://nature_frame/active/landscape`
 
-Enable Shuffle in Kiosk Satellite.
+Enable Shuffle.
 
-**Important:** on the tested setup, Kiosk Satellite's **Fill the screen = Smart**
-can crop poster-style artwork. Use **Fill the screen = Off** while testing if the
-whole image must remain visible. A dedicated ambient/blurred no-crop renderer is
-a separate follow-up feature.
+On the tested setup, **Fill the screen = Smart** can crop poster-style artwork.
+Use **Fill the screen = Off** when the complete artwork must be preserved until
+the dedicated ambient/blurred no-crop renderer is added.
 
-## Install Fotoo Overlay
+## Install the overlay plugin
 
 Use Kiosk Satellite **Plugin Manager -> Add plugin** and paste:
 
@@ -60,5 +76,5 @@ Use Kiosk Satellite **Plugin Manager -> Add plugin** and paste:
 ## Install Nature Frame
 
 Add the same repository to HACS as a custom integration and install
-**Nature Frame**. The repository release and integration manifest are versioned
-separately: repository 0.9.0 contains Nature Frame 0.6.0.
+**Nature Frame**. The repository/plugin and Nature Frame integration keep
+separate semantic versions.
