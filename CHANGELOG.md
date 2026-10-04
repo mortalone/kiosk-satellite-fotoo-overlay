@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.8
+
+- Packages Nature Frame 0.7.4.
+- Virtual collections now use distinct Lovelace covers.
+- Active playlists deduplicate the same underlying image across selected
+  collections.
+- Screensaver Overlay behavior is unchanged.
+
 ## 0.10.7
 
 - Packages Nature Frame 0.7.3.
