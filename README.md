@@ -3,7 +3,7 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay 0.10.3
+## Screensaver Overlay 0.10.4
 
 The overlay listens to Kiosk Satellite's official `screensaver.state` and
 `screensaver.view` plugin events, so it works above Kiosk Satellite's own
@@ -20,7 +20,7 @@ settings**:
 Existing Now Playing, Music Assistant, progress and doorbell camera behavior is
 otherwise preserved.
 
-## Nature Frame 0.7.0
+## Nature Frame 0.7.1
 
 Nature Frame now has **one independent profile per tablet/screen**.
 
@@ -34,6 +34,10 @@ Each profile has:
 - its own collection switches;
 - its own Media Source folder under
   **Nature Frame -> Screens / profiles -> <profile>**.
+
+Nature Frame 0.7.1 also exposes a representative collection thumbnail through
+each switch entity's `entity_picture`, so Home Assistant's built-in Picture
+Entity card can be used as a visual album selector.
 
 Each Kiosk Satellite screen is then pointed at that profile's Portrait or
 Landscape folder. The profile—not the switch itself—is what associates a set of
