@@ -1,33 +1,32 @@
 # Nature Frame Home Assistant integration
 
-Companion integration for the **Nature Frame Sync** Home Assistant app.
+Nature Frame is now a **streaming media source** for Home Assistant.
 
-It creates a writable Home Assistant select:
+It no longer needs to download an entire gallery before Kiosk Satellite can use it. The integration fetches a small catalog/index from the source repository, exposes the images through Home Assistant's Media Source browser, and Kiosk Satellite resolves each image URL only when that slide is shown.
+
+## Lovelace
+
+The integration creates:
 
 `select.nature_frame_gallery`
 
-Add that entity to Lovelace as a normal Entities card, Tile card, or dropdown. Changing the selection rebuilds:
+Use it as a dropdown/tile on Lovelace. Kiosk Satellite can stay pointed at:
 
-- `/media/nature-frame/active/portrait`
-- `/media/nature-frame/active/landscape`
+**Nature Frame → Active gallery · Portrait**
 
-using hard links where possible, so selecting a gallery does not duplicate hundreds of megabytes of images.
+Changing the select changes which gallery the active folder exposes the next time Kiosk Satellite builds its playlist.
 
-## Kiosk Satellite
+## Storage
 
-Point **Home Assistant Media** to:
+Streaming mode stores no full image collection on the Home Assistant machine. The old **Nature Frame Sync** app/add-on remains optional for a future offline-cache mode, but it is not required for normal use.
 
-- `nature-frame/active/portrait` for a portrait kiosk
-- `nature-frame/active/landscape` for a landscape kiosk
+## Orientation
 
-The selected gallery is then controlled from Lovelace.
+- Active gallery · Portrait → portrait assets
+- Active gallery · Landscape → landscape assets
 
-Kiosk Satellite builds its slideshow playlist when a screensaver session starts. If you change the gallery while the screensaver is already running, restart the screensaver to rebuild the playlist immediately.
+The Inky Bird Frame provider currently exposes 176 approved species in each orientation.
 
-## Install with HACS
+## Future collections
 
-Add this repository as a HACS custom repository of type **Integration**:
-
-`https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
-
-Install **Nature Frame**, restart Home Assistant, then add the **Nature Frame** integration under Devices & services.
+Additional providers (night sky, mammals, nature, insects, etc.) can be added as separate galleries. They will appear as extra options in `select.nature_frame_gallery`.

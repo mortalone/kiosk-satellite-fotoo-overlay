@@ -4,6 +4,9 @@
   "codeowners": [],
   "config_flow": true,
   "documentation": "https://github.com/mortalone/kiosk-satellite-fotoo-overlay/tree/main/custom_components/nature_frame",
-  "iot_class": "local_push",
-  "version": "0.2.0"
+  "dependencies": [
+    "media_source"
+  ],
+  "iot_class": "cloud_polling",
+  "version": "0.3.0"
 }
