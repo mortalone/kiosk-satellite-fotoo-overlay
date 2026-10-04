@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Screensaver Overlay",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
   "description": "Native Now Playing and doorbell overlays for Kiosk Satellite screensavers and Fotoo, with Music Assistant queue tracking, artwork retry and camera triggers.",
@@ -15,20 +15,17 @@
   ],
   "settings": [
     {
-      "key": "showOnKioskScreensaver",
-      "type": "boolean",
-      "title": "Show on Kiosk Satellite screensavers",
-      "default": true,
+      "key": "overlayTarget",
+      "type": "select",
+      "title": "Show overlays on",
+      "default": "Kiosk Satellite + Fotoo",
+      "options": [
+        "Kiosk Satellite + Fotoo",
+        "Kiosk Satellite only",
+        "Fotoo only"
+      ],
       "group": "Screensaver",
-      "description": "Show Now Playing and doorbell overlays while Kiosk Satellite's own screensaver is active. Black/blank screensavers stay untouched."
-    },
-    {
-      "key": "showOnFotoo",
-      "type": "boolean",
-      "title": "Show on Fotoo",
-      "default": true,
-      "group": "Screensaver",
-      "description": "Keep showing the overlays when Fotoo is used as the Android screensaver."
+      "description": "Choose whether Now Playing and doorbell overlays are shown on Kiosk Satellite's own screensavers, Fotoo, or both."
     },
     {
       "key": "nowPlayingEntity",
@@ -220,14 +217,6 @@
       "unit": "s",
       "group": "Doorbell",
       "description": "How long the camera overlay stays above Fotoo after a doorbell trigger."
-    },
-    {
-      "key": "cameraTestMode",
-      "type": "boolean",
-      "title": "Camera test mode",
-      "default": false,
-      "group": "Doorbell",
-      "description": "Keep the selected doorbell camera visible for the whole Fotoo session, without pressing the real doorbell. Turn this off after testing."
     }
   ],
   "commands": [
@@ -246,6 +235,14 @@
     {
       "id": "hide",
       "title": "Hide overlays"
+    },
+    {
+      "id": "showCameraTest",
+      "title": "Show doorbell camera test"
+    },
+    {
+      "id": "hideCameraTest",
+      "title": "Hide doorbell camera test"
     }
   ],
   "groups": [
