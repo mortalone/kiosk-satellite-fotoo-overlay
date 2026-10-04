@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.1.0
+## 0.2.0
+- Optimeret JPEG-lagring som standard.
+- JPEG-kvalitet og maksimal billeddimension.
+- Store upstream-PNG'er kasseres efter konvertering.
+- Active-gallery understøtter PNG, JPEG og WebP.
+- Versionsløft så Home Assistant App Store kan tilbyde en opdatering.
 
-- Første version.
-- Synkronisering af Inky Bird Frame.
-- Portrait, landscape eller begge retninger.
-- Inkrementelle opdateringer via GitHub blob-SHA.
-- Atomiske downloads og bevaring af eksisterende filer ved netværksfejl.
-- Mapper klar til Kiosk Satellite Home Assistant Media-pauseskærm.
+## 0.1.0
+- Første version med Inky Bird Frame.
