@@ -6,7 +6,7 @@ from homeassistant import config_entries
 from homeassistant.util import slugify
 
 from .const import DOMAIN
-from .profile import PROFILE_ID, PROFILE_NAME, entry_profile_id
+from .profile import PROFILE_ID, PROFILE_NAME, SCREEN_RATIO, entry_profile_id
 
 
 class NatureFrameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -31,6 +31,7 @@ class NatureFrameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data={
                     PROFILE_NAME: name,
                     PROFILE_ID: profile_id,
+                    SCREEN_RATIO: str(user_input[SCREEN_RATIO]),
                 },
             )
 
@@ -39,6 +40,9 @@ class NatureFrameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(PROFILE_NAME, default="Default"): str,
+                    vol.Required(SCREEN_RATIO, default="16:9"): vol.In(
+                        ["16:9", "16:10", "4:3", "3:2"]
+                    ),
                 }
             ),
         )
