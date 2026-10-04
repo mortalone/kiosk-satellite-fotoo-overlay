@@ -27,32 +27,86 @@ LOCAL_MEDIA_ROOT = Path("/media")
 PRIVATE_MEDIA_URL_ROOT = "/media/local"
 SUPPORTED_PRIVATE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
-# Curated Wikimedia Commons categories. Commons supplies licence metadata and
-# thumbnail URLs; Nature Frame never republishes the files itself.
-COMMONS_GALLERIES: dict[str, tuple[str, str]] = {
-    "mammal-illustrations": (
+SEEDED_PRIVATE_COLLECTIONS: dict[str, tuple[str, str]] = {
+    "zoo private": ("private-zoo", "Zoo · Private"),
+}
+
+
+@dataclass(frozen=True)
+class CommonsGallerySpec:
+    title: str
+    categories: tuple[str, ...]
+    max_items: int = 200
+
+
+# Public collections are intentionally based on named works/series instead of
+# broad topical scraping. This keeps each collection visually coherent.
+COMMONS_GALLERIES: dict[str, CommonsGallerySpec] = {
+    "zoo-swainson": CommonsGallerySpec(
+        "Zoo · Public · Swainson",
+        (
+            "Zoological Illustrations Volume I",
+            "Zoological Illustrations Volume II",
+            "Zoological Illustrations Volume III",
+        ),
+        270,
+    ),
+    "kitchen-pomological": CommonsGallerySpec(
+        "Kitchen · USDA Pomological Watercolors",
+        ("USDA Pomological Watercolors",),
+        240,
+    ),
+    "kitchen-kohler": CommonsGallerySpec(
+        "Kitchen · Köhler Botanical Plates",
+        ("Köhlers Medizinal-Pflanzen",),
+        240,
+    ),
+    "kitchen-beeton": CommonsGallerySpec(
+        "Kitchen · Mrs Beeton Plates",
+        ("Mrs. Beeton's Book of Household Management (images)",),
+        200,
+    ),
+    "mammal-illustrations": CommonsGallerySpec(
         "Mammal illustrations · Joseph Smit",
-        "Mammal illustrations by Joseph Smit",
+        ("Mammal illustrations by Joseph Smit",),
+        180,
     ),
-    "mammal-photos": (
+    "mammal-photos": CommonsGallerySpec(
         "Mammals · Featured photography",
-        "Featured pictures of mammals by Charlesjsharp",
+        ("Featured pictures of mammals by Charlesjsharp",),
+        180,
     ),
-    "night-sky": (
+    "night-sky": CommonsGallerySpec(
         "Night sky · Featured astronomy",
-        "Featured pictures of astronomy",
+        ("Featured pictures of astronomy",),
+        180,
     ),
-    "aurora": (
+    "aurora": CommonsGallerySpec(
         "Aurora · Featured pictures",
-        "Featured pictures of aurora",
+        ("Featured pictures of aurora",),
+        160,
     ),
-    "galaxies": (
+    "galaxies": CommonsGallerySpec(
         "Galaxies · Featured pictures",
-        "Featured pictures of galaxies",
+        ("Featured pictures of galaxies",),
+        160,
     ),
-    "zoo-art": (
-        "Zoo art & posters · Wikimedia Commons",
-        "Zoos in art",
+}
+
+VIRTUAL_GALLERIES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "kitchen-mixed": (
+        "Kitchen · Mixed",
+        ("kitchen-pomological", "kitchen-kohler", "kitchen-beeton"),
+    ),
+    "art-misc": (
+        "Art · Misc · Curated",
+        (
+            "mammal-illustrations",
+            "zoo-swainson",
+            "night-sky",
+            "aurora",
+            "galaxies",
+        ),
     ),
 }
 
@@ -77,6 +131,7 @@ class NatureGallery:
     portrait: tuple[NatureImage, ...]
     landscape: tuple[NatureImage, ...]
     is_private: bool = False
+    is_virtual: bool = False
 
     @property
     def thumbnail(self) -> str | None:
@@ -104,7 +159,6 @@ class NatureFrameCatalog:
             if refresh_remote:
                 remote: dict[str, NatureGallery] = {}
 
-                # A provider failure must not take down the whole Media Source.
                 try:
                     remote["birds"] = await self._async_load_inky()
                 except Exception:
@@ -112,8 +166,8 @@ class NatureFrameCatalog:
 
                 results = await asyncio.gather(
                     *[
-                        self._async_load_commons(key, title, category)
-                        for key, (title, category) in COMMONS_GALLERIES.items()
+                        self._async_load_commons(key, spec)
+                        for key, spec in COMMONS_GALLERIES.items()
                     ],
                     return_exceptions=True,
                 )
@@ -121,8 +175,11 @@ class NatureFrameCatalog:
                     if isinstance(result, NatureGallery):
                         remote[result.key] = result
 
-                # Keep the previous remote catalogue if a temporary network
-                # failure makes every provider fail during a scheduled refresh.
+                for key, (title, members) in VIRTUAL_GALLERIES.items():
+                    gallery = self._build_virtual_gallery(key, title, members, remote)
+                    if gallery:
+                        remote[key] = gallery
+
                 if remote:
                     self._remote_galleries = remote
                     self._last_refresh = time.monotonic()
@@ -143,9 +200,11 @@ class NatureFrameCatalog:
         session = async_get_clientsession(self.hass)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "HomeAssistant-NatureFrame/0.5.0",
+            "User-Agent": "HomeAssistant-NatureFrame/0.6.0",
         }
-        async with session.get(url, params=params, headers=headers, timeout=30) as response:
+        async with session.get(
+            url, params=params, headers=headers, timeout=30
+        ) as response:
             response.raise_for_status()
             return await response.json()
 
@@ -204,94 +263,159 @@ class NatureFrameCatalog:
         )
 
     async def _async_load_commons(
-        self, key: str, title: str, category: str
+        self,
+        key: str,
+        spec: CommonsGallerySpec,
     ) -> NatureGallery:
         portrait: list[NatureImage] = []
         landscape: list[NatureImage] = []
-        continuation: str | None = None
+        seen_pageids: set[str] = set()
+        per_category = max(1, spec.max_items // len(spec.categories))
 
-        # Cap each curated collection to 200 direct files. That keeps the
-        # Media Browser and kiosk playlist responsive while retaining variety.
-        while len(portrait) + len(landscape) < 200:
-            params = {
-                "action": "query",
-                "format": "json",
-                "formatversion": "2",
-                "generator": "categorymembers",
-                "gcmtitle": f"Category:{category}",
-                "gcmtype": "file",
-                "gcmlimit": "100",
-                "prop": "imageinfo",
-                "iiprop": "url|mime|size|extmetadata",
-                "iiurlwidth": str(COMMONS_THUMB_WIDTH),
-                "origin": "*",
-            }
-            if continuation:
-                params["gcmcontinue"] = continuation
-            data = await self._async_get_json(COMMONS_API, params=params)
-            pages = data.get("query", {}).get("pages", [])
+        for category in spec.categories:
+            continuation: str | None = None
+            category_count = 0
 
-            for page in pages:
-                info_list = page.get("imageinfo") or []
-                if not info_list:
-                    continue
-                info = info_list[0]
-                mime = str(info.get("mime", ""))
-                if mime not in {"image/jpeg", "image/png", "image/webp"}:
-                    continue
-                width = int(info.get("width") or 0)
-                height = int(info.get("height") or 0)
-                if not width or not height:
-                    continue
+            while (
+                category_count < per_category
+                and len(portrait) + len(landscape) < spec.max_items
+            ):
+                params = {
+                    "action": "query",
+                    "format": "json",
+                    "formatversion": "2",
+                    "generator": "categorymembers",
+                    "gcmtitle": f"Category:{category}",
+                    "gcmtype": "file",
+                    "gcmlimit": "100",
+                    "prop": "imageinfo",
+                    "iiprop": "url|mime|size|extmetadata",
+                    "iiurlwidth": str(COMMONS_THUMB_WIDTH),
+                    "origin": "*",
+                }
+                if continuation:
+                    params["gcmcontinue"] = continuation
 
-                file_title = str(page.get("title", ""))
-                clean_title = re.sub(r"^File:", "", file_title, flags=re.I)
-                clean_title = re.sub(
-                    r"\.(?:jpe?g|png|webp)$", "", clean_title, flags=re.I
-                )
-                clean_title = clean_title.replace("_", " ").strip()
-                ext = info.get("extmetadata") or {}
-                license_name = html.unescape(
-                    str((ext.get("LicenseShortName") or {}).get("value", ""))
-                )
-                description_url = str(info.get("descriptionurl") or "")
-                url = str(info.get("thumburl") or info.get("url") or "")
-                if not url:
-                    continue
-                thumb = str(info.get("thumburl") or url)
-                image = NatureImage(
-                    key=str(page.get("pageid")),
-                    title=clean_title,
-                    orientation="portrait" if height >= width else "landscape",
-                    url=url,
-                    thumbnail=thumb,
-                    mime_type=mime,
-                    source=description_url,
-                    license=license_name or None,
-                )
-                (portrait if height >= width else landscape).append(image)
-                if len(portrait) + len(landscape) >= 200:
+                data = await self._async_get_json(COMMONS_API, params=params)
+                pages = data.get("query", {}).get("pages", [])
+
+                for page in pages:
+                    pageid = str(page.get("pageid") or "")
+                    if not pageid or pageid in seen_pageids:
+                        continue
+
+                    info_list = page.get("imageinfo") or []
+                    if not info_list:
+                        continue
+                    info = info_list[0]
+                    mime = str(info.get("mime", ""))
+                    if mime not in {"image/jpeg", "image/png", "image/webp"}:
+                        continue
+
+                    width = int(info.get("width") or 0)
+                    height = int(info.get("height") or 0)
+                    if not width or not height:
+                        continue
+
+                    file_title = str(page.get("title", ""))
+                    clean_title = re.sub(r"^File:", "", file_title, flags=re.I)
+                    clean_title = re.sub(
+                        r"\.(?:jpe?g|png|webp)$", "", clean_title, flags=re.I
+                    )
+                    clean_title = clean_title.replace("_", " ").strip()
+
+                    ext = info.get("extmetadata") or {}
+                    license_name = html.unescape(
+                        str((ext.get("LicenseShortName") or {}).get("value", ""))
+                    )
+                    description_url = str(info.get("descriptionurl") or "")
+                    url = str(info.get("thumburl") or info.get("url") or "")
+                    if not url:
+                        continue
+
+                    thumb = str(info.get("thumburl") or url)
+                    image = NatureImage(
+                        key=pageid,
+                        title=clean_title,
+                        orientation="portrait" if height >= width else "landscape",
+                        url=url,
+                        thumbnail=thumb,
+                        mime_type=mime,
+                        source=description_url,
+                        license=license_name or None,
+                    )
+                    seen_pageids.add(pageid)
+                    (portrait if height >= width else landscape).append(image)
+                    category_count += 1
+
+                    if (
+                        category_count >= per_category
+                        or len(portrait) + len(landscape) >= spec.max_items
+                    ):
+                        break
+
+                continuation = data.get("continue", {}).get("gcmcontinue")
+                if not continuation:
                     break
-
-            continuation = data.get("continue", {}).get("gcmcontinue")
-            if not continuation:
-                break
 
         portrait.sort(key=lambda item: item.title.casefold())
         landscape.sort(key=lambda item: item.title.casefold())
         if not portrait and not landscape:
-            raise RuntimeError(f"No usable Commons images found for {category}")
+            raise RuntimeError(
+                f"No usable Commons images found for {', '.join(spec.categories)}"
+            )
 
+        source_categories = "; ".join(
+            f"https://commons.wikimedia.org/wiki/Category:{category.replace(' ', '_')}"
+            for category in spec.categories
+        )
         return NatureGallery(
             key=key,
-            title=title,
-            source=f"https://commons.wikimedia.org/wiki/Category:{category.replace(' ', '_')}",
+            title=spec.title,
+            source=source_categories,
             portrait=tuple(portrait),
             landscape=tuple(landscape),
         )
 
+    def _build_virtual_gallery(
+        self,
+        key: str,
+        title: str,
+        member_keys: tuple[str, ...],
+        galleries: dict[str, NatureGallery],
+    ) -> NatureGallery | None:
+        portrait: list[NatureImage] = []
+        landscape: list[NatureImage] = []
+        sources: list[str] = []
+
+        for member_key in member_keys:
+            gallery = galleries.get(member_key)
+            if not gallery:
+                continue
+            portrait.extend(gallery.portrait)
+            landscape.extend(gallery.landscape)
+            sources.append(gallery.title)
+
+        if not portrait and not landscape:
+            return None
+
+        return NatureGallery(
+            key=key,
+            title=title,
+            source="Curated mix: " + ", ".join(sources),
+            portrait=tuple(portrait),
+            landscape=tuple(landscape),
+            is_virtual=True,
+        )
+
     def _load_private_galleries(self) -> dict[str, NatureGallery]:
         PRIVATE_MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+
+        # Seed the household Zoo collection so it exists immediately after the
+        # integration is installed, even before the first private image is added.
+        zoo_folder = PRIVATE_MEDIA_ROOT / "Zoo Private"
+        zoo_folder.mkdir(parents=True, exist_ok=True)
+
         galleries: dict[str, NatureGallery] = {}
 
         for folder in sorted(
@@ -333,24 +457,30 @@ class NatureFrameCatalog:
                     )
                 )
 
-            if not images:
-                continue
+            seeded = SEEDED_PRIVATE_COLLECTIONS.get(folder.name.casefold())
+            if seeded:
+                key, title = seeded
+            else:
+                if not images:
+                    continue
+                slug = re.sub(
+                    r"[^a-z0-9]+", "-", folder.name.casefold()
+                ).strip("-")
+                slug = slug or "collection"
+                key = f"private-{slug}"
+                title = f"Private · {folder.name}"
+                if key in galleries:
+                    suffix = hashlib.sha1(
+                        folder.name.encode("utf-8")
+                    ).hexdigest()[:6]
+                    key = f"{key}-{suffix}"
 
-            slug = re.sub(r"[^a-z0-9]+", "-", folder.name.casefold()).strip("-")
-            slug = slug or "collection"
-            key = f"private-{slug}"
-            if key in galleries:
-                suffix = hashlib.sha1(folder.name.encode("utf-8")).hexdigest()[:6]
-                key = f"{key}-{suffix}"
-
-            # Private art is intentionally exposed in both orientation folders.
-            # Kiosk Satellite's Smart fill mode decides whether to cover or use
-            # a blurred ambient background, so portraits are never excluded
-            # from a landscape screen (or vice versa).
+            # Private images are exposed in both orientation folders. That
+            # guarantees posters remain available regardless of tablet rotation.
             image_tuple = tuple(images)
             galleries[key] = NatureGallery(
                 key=key,
-                title=f"Private · {folder.name}",
+                title=title,
                 source=str(folder),
                 portrait=image_tuple,
                 landscape=image_tuple,
@@ -360,10 +490,20 @@ class NatureFrameCatalog:
         return galleries
 
     def gallery_keys(self) -> list[str]:
+        group_order = {
+            "birds": 0,
+            "zoo-swainson": 1,
+            "private-zoo": 2,
+            "kitchen-pomological": 3,
+            "kitchen-kohler": 4,
+            "kitchen-beeton": 5,
+            "kitchen-mixed": 6,
+            "art-misc": 7,
+        }
         return sorted(
             self.galleries,
             key=lambda key: (
-                self.galleries[key].is_private,
+                group_order.get(key, 20 if not self.galleries[key].is_private else 30),
                 self.galleries[key].title.casefold(),
             ),
         )
