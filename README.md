@@ -3,7 +3,7 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay 0.10.6
+## Screensaver Overlay 0.10.7
 
 The overlay listens to Kiosk Satellite's official `screensaver.state` and
 `screensaver.view` plugin events, so it works above Kiosk Satellite's own
@@ -20,7 +20,7 @@ settings**:
 Existing Now Playing, Music Assistant, progress and doorbell camera behavior is
 otherwise preserved.
 
-## Nature Frame 0.7.2
+## Nature Frame 0.7.3
 
 Nature Frame now has **one independent profile per tablet/screen**.
 
