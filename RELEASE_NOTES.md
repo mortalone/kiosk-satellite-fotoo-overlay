@@ -1,22 +1,21 @@
-## Screensaver Overlay 0.10.6
+## Screensaver Overlay 0.10.7
 
-Packaging release. Overlay behavior is unchanged from 0.10.4.
+Packaging release. Overlay behavior is unchanged.
 
-## Nature Frame 0.7.2
+## Nature Frame 0.7.3
 
-This release contains the requested no-crop solid framing and the latest
-per-screen profile + Lovelace thumbnail features.
+This release fixes missing public collection switches when Wikimedia Commons'
+API cannot be reached from Home Assistant during startup.
 
-For screen-profile playlists Nature Frame creates a canvas matching the target
-screen ratio. The complete artwork remains visible, while unused top/bottom or
-side areas are filled with **solid colors sampled from the nearest image edge**
-instead of black bars.
+Nature Frame now includes small built-in fallback catalogues for:
 
-Use Kiosk Satellite **Fill the screen = Off**.
+- Zoo · Public · Swainson
+- Kitchen · USDA Pomological Watercolors
+- Kitchen · Köhler Botanical Plates
+- Kitchen · Mrs Beeton Plates
 
-Each Nature Frame profile supports 16:9, 16:10, 4:3 or 3:2. Portrait playback
-automatically inverts the configured landscape ratio. Framed images are created
-lazily and cached under `/media/nature-frame/framed/`.
+The full Wikimedia catalogue is still used whenever the API works. The fallback
+only guarantees that the collections and thumbnails exist and remain testable.
 
-Collection switches expose representative thumbnails as `entity_picture` for
-native Lovelace Picture Entity cards.
+Nature Frame 0.7.2 solid edge-color framing and 0.7.1 Lovelace thumbnails remain
+included.
