@@ -2,7 +2,7 @@
 
 Native Android system overlays above Fotoo while Fotoo runs as the Android screensaver.
 
-## 0.8.3
+## 0.8.4
 
 - Now Playing uses Kiosk Satellite's existing Music Assistant configuration directly when the selected KS player source is Music Assistant.
 - The plugin polls Music Assistant's active queue directly, so automatic next-track transitions do not depend on the Home Assistant media_player updating correctly.
@@ -15,6 +15,7 @@ Native Android system overlays above Fotoo while Fotoo runs as the Android scree
 - Camera width, height and vertical position are adjustable.
 - Camera width default is 90%, aligned to Kiosk Satellite's 5% numeric step validation.
 - Removed the empty Testing display group; Kiosk Satellite only accepts display groups that correspond to an actual setting group.
+- DreamService stop now hard-clears inferred/preview/manual overlay state, so overlays are removed as soon as Fotoo/screensaver closes and cannot remain over the Kiosk Satellite dashboard.
 - Separate opacity controls for Now Playing and the camera.
 - Persistent camera test mode remains available. **Attach / show overlays now** is now a plugin action instead of a setting, keeping the manifest within Kiosk Satellite's 20-setting SDK limit.
 

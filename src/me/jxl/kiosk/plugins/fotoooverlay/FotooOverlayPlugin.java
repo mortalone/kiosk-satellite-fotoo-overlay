@@ -228,6 +228,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             showTestOverlay();
         } else if ("hide".equals(command)) {
             main.post(() -> {
+                inferredFotoo = false;
+                forceOverlayPreview = false;
+                manualFotoo = false;
+                main.removeCallbacks(liveStatePollTask);
                 hideDoorbell();
                 hideNowPlaying();
             });
@@ -310,10 +314,21 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             @Override public void onReceive(Context ignored, Intent intent) {
                 String action = intent.getAction();
                 if (Intent.ACTION_DREAMING_STARTED.equals(action)) {
+                    // An exact DreamService start supersedes any temporary
+                    // attach/inference state left from an update or preview.
                     dreaming = true;
+                    inferredFotoo = false;
+                    forceOverlayPreview = false;
                     updatePresentation();
                 } else if (Intent.ACTION_DREAMING_STOPPED.equals(action)) {
+                    // This is the authoritative signal that Fotoo's Android
+                    // screensaver has gone away. Clear every fallback mode
+                    // that could otherwise keep TYPE_APPLICATION_OVERLAY
+                    // windows alive over the Kiosk Satellite dashboard.
                     dreaming = false;
+                    inferredFotoo = false;
+                    forceOverlayPreview = false;
+                    manualFotoo = false;
                     updatePresentation();
                 }
             }
@@ -1155,7 +1170,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.8.3 test");
+        test.setText("Fotoo Overlay 0.8.4 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
