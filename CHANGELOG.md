@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.10
+
+- Packages Nature Frame 0.7.6.
+- Trims transparent outer padding from background-removed PNG posters before
+  fitting them to the target screen.
+- Makes private Zoo posters use much more of the available display area while
+  keeping the complete visible artwork.
+- Screensaver Overlay behavior is unchanged.
+
 ## 0.10.9
 
 - Packages Nature Frame 0.7.5.
