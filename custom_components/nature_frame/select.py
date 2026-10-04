@@ -81,8 +81,9 @@ def _apply_gallery(gallery: str) -> None:
         if not source.exists():
             continue
 
-        for image in sorted(source.glob("*.png")):
-            _link_file(image, active / image.name)
+        for image in sorted(source.iterdir()):
+            if image.is_file() and image.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+                _link_file(image, active / image.name)
 
         source_txt = source.parent / "SOURCE.txt"
         if source_txt.is_file():
