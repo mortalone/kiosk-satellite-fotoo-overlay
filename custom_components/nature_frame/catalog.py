@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
+import mimetypes
 import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -14,13 +18,17 @@ INKY_REPO = "veteranbv/inky-bird-frame"
 INKY_BRANCH = "main"
 REFRESH_SECONDS = 6 * 60 * 60
 INKY_PATH_RE = re.compile(
-    r"^catalog/species/(?P<species>[^/]+)/(?P<variant>portrait|display)\\.png$"
+    r"^catalog/species/(?P<species>[^/]+)/(?P<variant>portrait|display)\.png$"
 )
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 COMMONS_THUMB_WIDTH = 1200
+PRIVATE_MEDIA_ROOT = Path("/media/nature-frame/private")
+LOCAL_MEDIA_ROOT = Path("/media")
+PRIVATE_MEDIA_URL_ROOT = "/media/local"
+SUPPORTED_PRIVATE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
-# Curated Wikimedia Commons categories. Commons supplies the licence metadata
-# and thumbnail URLs; Nature Frame never republishes the files itself.
+# Curated Wikimedia Commons categories. Commons supplies licence metadata and
+# thumbnail URLs; Nature Frame never republishes the files itself.
 COMMONS_GALLERIES: dict[str, tuple[str, str]] = {
     "mammal-illustrations": (
         "Mammal illustrations · Joseph Smit",
@@ -41,6 +49,10 @@ COMMONS_GALLERIES: dict[str, tuple[str, str]] = {
     "galaxies": (
         "Galaxies · Featured pictures",
         "Featured pictures of galaxies",
+    ),
+    "zoo-art": (
+        "Zoo art & posters · Wikimedia Commons",
+        "Zoos in art",
     ),
 }
 
@@ -64,6 +76,7 @@ class NatureGallery:
     source: str
     portrait: tuple[NatureImage, ...]
     landscape: tuple[NatureImage, ...]
+    is_private: bool = False
 
     @property
     def thumbnail(self) -> str | None:
@@ -75,41 +88,54 @@ class NatureFrameCatalog:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
         self.galleries: dict[str, NatureGallery] = {}
+        self._remote_galleries: dict[str, NatureGallery] = {}
         self._last_refresh = 0.0
         self._lock = asyncio.Lock()
 
     async def async_refresh(self, force: bool = False) -> None:
-        now = time.monotonic()
-        if not force and self.galleries and now - self._last_refresh < REFRESH_SECONDS:
-            return
         async with self._lock:
             now = time.monotonic()
-            if not force and self.galleries and now - self._last_refresh < REFRESH_SECONDS:
-                return
-
-            galleries: dict[str, NatureGallery] = {}
-            # A provider failure must not take down the whole Media Source.
-            try:
-                galleries["birds"] = await self._async_load_inky()
-            except Exception:
-                pass
-
-            results = await asyncio.gather(
-                *[
-                    self._async_load_commons(key, title, category)
-                    for key, (title, category) in COMMONS_GALLERIES.items()
-                ],
-                return_exceptions=True,
+            refresh_remote = (
+                force
+                or not self._remote_galleries
+                or now - self._last_refresh >= REFRESH_SECONDS
             )
-            for result in results:
-                if isinstance(result, NatureGallery):
-                    galleries[result.key] = result
 
-            if not galleries:
+            if refresh_remote:
+                remote: dict[str, NatureGallery] = {}
+
+                # A provider failure must not take down the whole Media Source.
+                try:
+                    remote["birds"] = await self._async_load_inky()
+                except Exception:
+                    pass
+
+                results = await asyncio.gather(
+                    *[
+                        self._async_load_commons(key, title, category)
+                        for key, (title, category) in COMMONS_GALLERIES.items()
+                    ],
+                    return_exceptions=True,
+                )
+                for result in results:
+                    if isinstance(result, NatureGallery):
+                        remote[result.key] = result
+
+                # Keep the previous remote catalogue if a temporary network
+                # failure makes every provider fail during a scheduled refresh.
+                if remote:
+                    self._remote_galleries = remote
+                    self._last_refresh = time.monotonic()
+                elif not self._remote_galleries:
+                    raise RuntimeError("Nature Frame could not load any remote galleries")
+
+            private = await self.hass.async_add_executor_job(
+                self._load_private_galleries
+            )
+            self.galleries = {**self._remote_galleries, **private}
+
+            if not self.galleries:
                 raise RuntimeError("Nature Frame could not load any galleries")
-
-            self.galleries = galleries
-            self._last_refresh = time.monotonic()
 
     async def _async_get_json(
         self, url: str, *, params: dict[str, str] | None = None
@@ -117,7 +143,7 @@ class NatureFrameCatalog:
         session = async_get_clientsession(self.hass)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "HomeAssistant-NatureFrame/0.4.0",
+            "User-Agent": "HomeAssistant-NatureFrame/0.5.0",
         }
         async with session.get(url, params=params, headers=headers, timeout=30) as response:
             response.raise_for_status()
@@ -164,8 +190,8 @@ class NatureFrameCatalog:
             )
             (portrait if orientation == "portrait" else landscape).append(image)
 
-        portrait.sort(key=lambda item: item.title)
-        landscape.sort(key=lambda item: item.title)
+        portrait.sort(key=lambda item: item.title.casefold())
+        landscape.sort(key=lambda item: item.title.casefold())
         if not portrait and not landscape:
             raise RuntimeError("No Inky Bird Frame images were found")
 
@@ -185,8 +211,7 @@ class NatureFrameCatalog:
         continuation: str | None = None
 
         # Cap each curated collection to 200 direct files. That keeps the
-        # Media Browser and the kiosk playlist responsive while still giving
-        # plenty of variety.
+        # Media Browser and kiosk playlist responsive while retaining variety.
         while len(portrait) + len(landscape) < 200:
             params = {
                 "action": "query",
@@ -221,7 +246,9 @@ class NatureFrameCatalog:
 
                 file_title = str(page.get("title", ""))
                 clean_title = re.sub(r"^File:", "", file_title, flags=re.I)
-                clean_title = re.sub(r"\\.(?:jpe?g|png|webp)$", "", clean_title, flags=re.I)
+                clean_title = re.sub(
+                    r"\.(?:jpe?g|png|webp)$", "", clean_title, flags=re.I
+                )
                 clean_title = clean_title.replace("_", " ").strip()
                 ext = info.get("extmetadata") or {}
                 license_name = html.unescape(
@@ -263,8 +290,83 @@ class NatureFrameCatalog:
             landscape=tuple(landscape),
         )
 
+    def _load_private_galleries(self) -> dict[str, NatureGallery]:
+        PRIVATE_MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+        galleries: dict[str, NatureGallery] = {}
+
+        for folder in sorted(
+            (path for path in PRIVATE_MEDIA_ROOT.iterdir() if path.is_dir()),
+            key=lambda path: path.name.casefold(),
+        ):
+            images: list[NatureImage] = []
+            for path in sorted(
+                (
+                    item
+                    for item in folder.rglob("*")
+                    if item.is_file()
+                    and item.suffix.casefold() in SUPPORTED_PRIVATE_EXTENSIONS
+                ),
+                key=lambda item: item.as_posix().casefold(),
+            ):
+                try:
+                    relative = path.relative_to(LOCAL_MEDIA_ROOT)
+                except ValueError:
+                    continue
+
+                relative_url = quote(relative.as_posix(), safe="/")
+                url = f"{PRIVATE_MEDIA_URL_ROOT}/{relative_url}"
+                mime_type = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+                image_key = hashlib.sha1(
+                    relative.as_posix().encode("utf-8")
+                ).hexdigest()[:16]
+                title = re.sub(r"[_-]+", " ", path.stem).strip() or path.name
+                images.append(
+                    NatureImage(
+                        key=image_key,
+                        title=title,
+                        orientation="any",
+                        url=url,
+                        thumbnail=url,
+                        mime_type=mime_type,
+                        source="Local Home Assistant media",
+                        license="Private/local",
+                    )
+                )
+
+            if not images:
+                continue
+
+            slug = re.sub(r"[^a-z0-9]+", "-", folder.name.casefold()).strip("-")
+            slug = slug or "collection"
+            key = f"private-{slug}"
+            if key in galleries:
+                suffix = hashlib.sha1(folder.name.encode("utf-8")).hexdigest()[:6]
+                key = f"{key}-{suffix}"
+
+            # Private art is intentionally exposed in both orientation folders.
+            # Kiosk Satellite's Smart fill mode decides whether to cover or use
+            # a blurred ambient background, so portraits are never excluded
+            # from a landscape screen (or vice versa).
+            image_tuple = tuple(images)
+            galleries[key] = NatureGallery(
+                key=key,
+                title=f"Private · {folder.name}",
+                source=str(folder),
+                portrait=image_tuple,
+                landscape=image_tuple,
+                is_private=True,
+            )
+
+        return galleries
+
     def gallery_keys(self) -> list[str]:
-        return sorted(self.galleries)
+        return sorted(
+            self.galleries,
+            key=lambda key: (
+                self.galleries[key].is_private,
+                self.galleries[key].title.casefold(),
+            ),
+        )
 
     def gallery(self, key: str) -> NatureGallery | None:
         return self.galleries.get(key)
