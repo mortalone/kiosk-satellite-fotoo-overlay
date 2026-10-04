@@ -3,7 +3,7 @@
 Nature Frame is a streaming Media Source for Home Assistant for Kiosk Satellite
 and other Home Assistant media consumers.
 
-## 0.7.0
+## 0.7.2
 
 ### One collection profile per screen
 
@@ -66,3 +66,19 @@ Kiosk Satellite's current **Fill the screen = Smart** behavior can still crop
 poster-like images on the tested setup. Use **Fill the screen = Off** when the
 whole artwork must remain visible until the dedicated ambient/blurred no-crop
 renderer is implemented.
+
+
+### Solid framing
+
+For screen-profile playlists, Nature Frame 0.7.2 lazily creates a canvas that
+matches the profile's configured display ratio. The complete artwork is kept
+inside that canvas. Any unused top/bottom or side area is filled with a **solid
+color sampled from the nearest edge of the image**, rather than black.
+
+This is designed to be used with Kiosk Satellite:
+
+**Fill the screen = Off**
+
+Choose the screen's landscape aspect ratio in the Nature Frame profile options.
+Portrait playback automatically uses the inverted ratio. Generated images are
+cached under `/media/nature-frame/framed/`.
