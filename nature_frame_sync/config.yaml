@@ -1,0 +1,25 @@
+name: Nature Frame Sync
+version: "0.1.0"
+slug: nature_frame_sync
+description: Sync curated nature illustration collections into Home Assistant Media for use as screensavers.
+url: https://github.com/mortalone/kiosk-satellite-fotoo-overlay/tree/main/nature_frame_sync
+stage: experimental
+startup: application
+init: false
+arch:
+  - amd64
+  - aarch64
+  - armv7
+map:
+  - type: media
+    read_only: false
+options:
+  inky_birds: true
+  orientation: portrait
+  update_interval_hours: 24
+  delete_removed: true
+schema:
+  inky_birds: bool
+  orientation: list(portrait|landscape|both)
+  update_interval_hours: int(1,168)
+  delete_removed: bool

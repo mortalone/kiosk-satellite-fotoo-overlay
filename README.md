@@ -21,3 +21,18 @@ Recommended door triggers:
 Use Kiosk Satellite **Plugin Manager -> Add plugin** and paste:
 
 `https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
+
+
+---
+
+## Home Assistant app: Nature Frame Sync
+
+This repository also contains **Nature Frame Sync**, a Home Assistant app/add-on that synchronizes curated nature illustrations into Home Assistant Media for screensavers.
+
+Current collection: **Inky Bird Frame**. It keeps separate portrait and landscape folders and downloads only new or changed upstream images after the initial sync.
+
+Add this repository to the Home Assistant App Store:
+
+`https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
+
+Then install **Nature Frame Sync** and point Kiosk Satellite's **Home Assistant Media** screensaver at `nature-frame/birds/portrait` or `nature-frame/birds/landscape`.
