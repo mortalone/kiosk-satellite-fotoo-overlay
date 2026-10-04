@@ -96,8 +96,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private boolean showNextTrack = false;
     private int doorbellSeconds = 20;
     private int cameraOpacity = 100;
-    private int cameraWidthPercent = 90;
-    private int cameraHeightPercent = 55;
+    private int cameraSizePercent = 90;
     private String cameraPosition = "Center";
     private boolean cameraTestMode = false;
     private boolean showOnKioskScreensaver = true;
@@ -518,10 +517,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         doorbellSeconds = seconds instanceof Number ? Math.max(5, Math.min(60, ((Number) seconds).intValue())) : 20;
         Object camOpacity = values.get("cameraOpacity");
         cameraOpacity = camOpacity instanceof Number ? Math.max(10, Math.min(100, ((Number) camOpacity).intValue())) : 100;
-        Object camWidth = values.get("cameraWidthPercent");
-        cameraWidthPercent = camWidth instanceof Number ? Math.max(30, Math.min(100, ((Number) camWidth).intValue())) : 90;
-        Object camHeight = values.get("cameraHeightPercent");
-        cameraHeightPercent = camHeight instanceof Number ? Math.max(20, Math.min(90, ((Number) camHeight).intValue())) : 55;
+        Object camSize = values.get("cameraSizePercent");
+        cameraSizePercent = camSize instanceof Number ? Math.max(30, Math.min(100, ((Number) camSize).intValue())) : 90;
         String camPosition = stringSetting(values, "cameraPosition");
         cameraPosition = "Top".equals(camPosition) || "Bottom".equals(camPosition) ? camPosition : "Center";
         String overlayTarget = stringSetting(values, "overlayTarget");
@@ -1184,7 +1181,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             }
 
             doorbellImage = new ImageView(context);
-            doorbellImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            doorbellImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
             doorbellImage.setAlpha(1f);
             frame.addView(doorbellImage, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -1203,10 +1200,13 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
             int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
             int screenHeight = context.getResources().getDisplayMetrics().heightPixels;
-            int width = Math.max(dp(240), screenWidth * cameraWidthPercent / 100);
-            int height = Math.max(dp(180), screenHeight * cameraHeightPercent / 100);
+            int width = Math.max(dp(240), screenWidth * cameraSizePercent / 100);
             width = Math.min(screenWidth, width);
-            height = Math.min(screenHeight, height);
+            int height = Math.max(dp(135), Math.round(width * 9f / 16f));
+            if (height > screenHeight) {
+                height = screenHeight;
+                width = Math.min(screenWidth, Math.round(height * 16f / 9f));
+            }
             WindowManager.LayoutParams params = cameraOverlayParams(width, height);
             if ("Top".equals(cameraPosition)) {
                 params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
@@ -1274,10 +1274,39 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                 if (bitmap != null && doorbellImage != null && doorbellView != null) {
                     Bitmap shown = cameraOpacity >= 100 ? opaqueBitmap(bitmap) : bitmap;
                     doorbellImage.setImageBitmap(shown);
+                    applyCameraAspectRatio(bitmap.getWidth(), bitmap.getHeight());
                     applyCameraVisibility();
                 }
             });
         });
+    }
+
+    private void applyCameraAspectRatio(int sourceWidth, int sourceHeight) {
+        if (doorbellView == null || windowManager == null ||
+                sourceWidth <= 0 || sourceHeight <= 0) return;
+
+        int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = context.getResources().getDisplayMetrics().heightPixels;
+        int width = Math.max(dp(240), screenWidth * cameraSizePercent / 100);
+        width = Math.min(screenWidth, width);
+
+        float aspect = (float) sourceWidth / (float) sourceHeight;
+        int height = Math.max(dp(120), Math.round(width / aspect));
+        if (height > screenHeight) {
+            height = screenHeight;
+            width = Math.min(screenWidth, Math.round(height * aspect));
+        }
+
+        try {
+            WindowManager.LayoutParams params =
+                    (WindowManager.LayoutParams) doorbellView.getLayoutParams();
+            if (params.width == width && params.height == height) return;
+            params.width = width;
+            params.height = height;
+            windowManager.updateViewLayout(doorbellView, params);
+        } catch (Throwable ignored) {
+            // A refresh frame may land while the overlay is closing.
+        }
     }
 
     private void hideDoorbell() {
@@ -1333,7 +1362,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
         test.setTag("fotoo-overlay:test");
-        test.setText("Screensaver Overlay 0.11.2 test");
+        test.setText("Screensaver Overlay 0.11.3 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
