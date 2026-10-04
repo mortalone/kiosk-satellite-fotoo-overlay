@@ -1,5 +1,17 @@
 # Nature Frame changelog
 
+## 0.8.1
+
+- Fixes broken/missing Lovelace thumbnails for private collections such as
+  **Zoo · Private**.
+- Private collections now get a generated, browser-safe JPEG cover under
+  `/media/nature-frame/previews/private/` instead of exposing the first source
+  file directly as `entity_picture`.
+- The cover filename is fingerprinted from the source path, size and mtime, so
+  replacing the first private image refreshes the cover automatically.
+- Transparent PNGs, Unicode/spaces in filenames and recently replaced source
+  files no longer make the selector tile lose its image.
+
 ## 0.8.0
 
 - Adds per-profile selectable empty-area fill modes:
