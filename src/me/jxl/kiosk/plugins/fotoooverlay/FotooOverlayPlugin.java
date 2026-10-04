@@ -17,6 +17,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -35,7 +36,6 @@ import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
-import java.time.Instant;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.HashMap;
@@ -94,6 +94,16 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private String haBaseUrl;
     private String mediaState;
     private Map<?, ?> mediaAttributes = Collections.emptyMap();
+    private String mediaIdentity = "";
+    private double mediaPositionAnchor = 0;
+    private double lastMediaPositionAttr = Double.NaN;
+    private long mediaPositionAnchorRealtime = SystemClock.elapsedRealtime();
+    private boolean mediaPollPending;
+    private boolean cameraStatePollPending;
+    private boolean trigger1PollPending;
+    private boolean trigger2PollPending;
+    private boolean playlistPollPending;
+    private boolean nextTrackPollPending;
     private String playlistState = "";
     private String nextTrackState = "";
     private Map<?, ?> cameraAttributes = Collections.emptyMap();
@@ -118,6 +128,19 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private ImageView doorbellImage;
     private TextView doorbellLabel;
     private boolean cameraFetchPending;
+
+    private final Runnable liveStatePollTask = new Runnable() {
+        @Override public void run() {
+            if (!fotooActive() || host == null) return;
+            pollMediaEntity();
+            if (doorbellView != null || cameraTestMode) pollCameraEntity();
+            pollDoorbellTrigger(1);
+            pollDoorbellTrigger(2);
+            if (showPlaylist && !playlistEntity.isEmpty()) pollSimpleTextEntity(playlistEntity, true);
+            if (showNextTrack && !nextTrackEntity.isEmpty()) pollSimpleTextEntity(nextTrackEntity, false);
+            main.postDelayed(this, 1000);
+        }
+    };
 
     private final Runnable progressTickTask = new Runnable() {
         @Override public void run() {
@@ -203,9 +226,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         Map<?, ?> attrs = attrsValue instanceof Map ? (Map<?, ?>) attrsValue : Collections.emptyMap();
 
         if (entityId.equals(nowPlayingEntity)) {
-            mediaState = state;
-            mediaAttributes = attrs;
-            main.post(this::updateNowPlaying);
+            applyMediaSnapshot(state, attrs);
         }
 
         if (!playlistEntity.isEmpty() && entityId.equals(playlistEntity)) {
@@ -224,29 +245,11 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         }
 
         if (entityId.equals(doorbellEntity)) {
-            boolean trigger = false;
-            if (!doorbellInitialSeen) {
-                doorbellInitialSeen = true;
-            } else if (doorbellEntity.startsWith("event.")) {
-                trigger = !Objects.equals(lastDoorbellState, state);
-            } else {
-                trigger = "on".equalsIgnoreCase(state) && !"on".equalsIgnoreCase(lastDoorbellState);
-            }
-            lastDoorbellState = state;
-            if (trigger && fotooActive()) main.post(this::showDoorbell);
+            handleDoorbellState(1, state, false);
         }
 
         if (entityId.equals(doorbellEntity2)) {
-            boolean trigger = false;
-            if (!doorbellInitialSeen2) {
-                doorbellInitialSeen2 = true;
-            } else if (doorbellEntity2.startsWith("event.")) {
-                trigger = !Objects.equals(lastDoorbellState2, state);
-            } else {
-                trigger = "on".equalsIgnoreCase(state) && !"on".equalsIgnoreCase(lastDoorbellState2);
-            }
-            lastDoorbellState2 = state;
-            if (trigger && fotooActive()) main.post(this::showDoorbell);
+            handleDoorbellState(2, state, false);
         }
     }
 
@@ -269,6 +272,12 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             io = null;
         }
         subscribedEntities.clear();
+        mediaPollPending = false;
+        cameraStatePollPending = false;
+        trigger1PollPending = false;
+        trigger2PollPending = false;
+        playlistPollPending = false;
+        nextTrackPollPending = false;
         host = null;
         settings = null;
         context = null;
@@ -427,6 +436,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         doorbellInitialSeen2 = false;
         lastDoorbellState2 = null;
         loadedMediaPicture = null;
+        mediaIdentity = "";
+        lastMediaPositionAttr = Double.NaN;
+        mediaPositionAnchor = 0;
+        mediaPositionAnchorRealtime = SystemClock.elapsedRealtime();
         main.post(this::updatePresentation);
     }
 
@@ -456,14 +469,25 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private void updatePresentation() {
+        main.removeCallbacks(liveStatePollTask);
         if (!fotooActive()) {
             hideDoorbell();
             hideNowPlaying();
             return;
         }
+
+        // Do not depend only on subscription callbacks here. Fotoo is an
+        // external DreamService and some Android builds can delay those
+        // callbacks while the Kiosk Activity is backgrounded. Polling the
+        // selected HA entities keeps track changes, progress and door events
+        // live while Fotoo owns the screen.
+        main.post(liveStatePollTask);
+
         if (cameraTestMode && !doorbellCameraEntity.isEmpty()) {
             showDoorbell();
+            pollCameraEntity();
         }
+        pollMediaEntity();
         updateNowPlaying();
     }
 
@@ -514,15 +538,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (mediaProgress == null || mediaTime == null) return;
 
         double duration = numberAttr(mediaAttributes, "media_duration", 0);
-        double position = numberAttr(mediaAttributes, "media_position", 0);
-        String updated = attr(mediaAttributes, "media_position_updated_at", "");
-
-        if ("playing".equalsIgnoreCase(mediaState) && !updated.isEmpty()) {
-            try {
-                long updatedMs = Instant.parse(updated).toEpochMilli();
-                position += Math.max(0, System.currentTimeMillis() - updatedMs) / 1000.0;
-            } catch (Throwable ignored) {}
-        }
+        double position = estimatedMediaPosition();
 
         if (duration > 0) position = Math.max(0, Math.min(duration, position));
         boolean haveTimeline = duration > 0;
@@ -548,6 +564,44 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         mediaTime.setVisibility(label.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
+    private double estimatedMediaPosition() {
+        double position = mediaPositionAnchor;
+        if ("playing".equalsIgnoreCase(mediaState)) {
+            position += Math.max(0, SystemClock.elapsedRealtime() - mediaPositionAnchorRealtime) / 1000.0;
+        }
+        return Math.max(0, position);
+    }
+
+    private void applyMediaSnapshot(String state, Map<?, ?> attrs) {
+        String previousState = mediaState;
+        String identity = firstAttr(attrs, "media_content_id", "media_title");
+        double positionAttr = numberAttr(attrs, "media_position", 0);
+
+        boolean identityChanged = !Objects.equals(mediaIdentity, identity);
+        boolean positionChanged = Double.isNaN(lastMediaPositionAttr) ||
+                Math.abs(positionAttr - lastMediaPositionAttr) >= 0.5;
+        boolean stateChanged = !Objects.equals(previousState, state);
+
+        // Keep a monotonic local anchor. HA/MA does not publish media_position
+        // every second; if we reset to the same stale attribute on each poll,
+        // the progress bar appears frozen.
+        if (identityChanged || positionChanged || stateChanged) {
+            if (stateChanged && "paused".equalsIgnoreCase(state) &&
+                    !identityChanged && !positionChanged) {
+                mediaPositionAnchor = estimatedMediaPosition();
+            } else {
+                mediaPositionAnchor = Math.max(0, positionAttr);
+            }
+            mediaPositionAnchorRealtime = SystemClock.elapsedRealtime();
+        }
+
+        mediaIdentity = identity;
+        lastMediaPositionAttr = positionAttr;
+        mediaState = state;
+        mediaAttributes = attrs == null ? Collections.emptyMap() : attrs;
+        main.post(this::updateNowPlaying);
+    }
+
     private static String formatTime(long seconds) {
         long h = seconds / 3600;
         long m = (seconds % 3600) / 60;
@@ -555,6 +609,102 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         return h > 0
                 ? String.format(java.util.Locale.ROOT, "%d:%02d:%02d", h, m, s)
                 : String.format(java.util.Locale.ROOT, "%d:%02d", m, s);
+    }
+
+    private void pollMediaEntity() {
+        if (host == null || nowPlayingEntity.isEmpty() || mediaPollPending) return;
+        mediaPollPending = true;
+        Map<String, Object> args = new HashMap<>();
+        args.put("entityId", nowPlayingEntity);
+        host.executeCommand("getHaEntityState", args, (ok, data, error) -> {
+            mediaPollPending = false;
+            if (!ok || !(data instanceof Map)) return;
+            Map<?, ?> snapshot = (Map<?, ?>) data;
+            String state = snapshot.get("state") == null ? null : String.valueOf(snapshot.get("state"));
+            Object attrsValue = snapshot.get("attributes");
+            Map<?, ?> attrs = attrsValue instanceof Map ? (Map<?, ?>) attrsValue : Collections.emptyMap();
+            applyMediaSnapshot(state, attrs);
+        });
+    }
+
+    private void pollCameraEntity() {
+        if (host == null || doorbellCameraEntity.isEmpty() || cameraStatePollPending) return;
+        cameraStatePollPending = true;
+        Map<String, Object> args = new HashMap<>();
+        args.put("entityId", doorbellCameraEntity);
+        host.executeCommand("getHaEntityState", args, (ok, data, error) -> {
+            cameraStatePollPending = false;
+            if (!ok || !(data instanceof Map)) return;
+            Object attrsValue = ((Map<?, ?>) data).get("attributes");
+            if (attrsValue instanceof Map) {
+                cameraAttributes = (Map<?, ?>) attrsValue;
+                if (doorbellView != null) main.post(this::refreshDoorbellImage);
+            }
+        });
+    }
+
+    private void pollDoorbellTrigger(int which) {
+        String entity = which == 1 ? doorbellEntity : doorbellEntity2;
+        if (host == null || entity.isEmpty()) return;
+        if (which == 1 ? trigger1PollPending : trigger2PollPending) return;
+        if (which == 1) trigger1PollPending = true; else trigger2PollPending = true;
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("entityId", entity);
+        host.executeCommand("getHaEntityState", args, (ok, data, error) -> {
+            if (which == 1) trigger1PollPending = false; else trigger2PollPending = false;
+            if (!ok || !(data instanceof Map)) return;
+            Object value = ((Map<?, ?>) data).get("state");
+            String state = value == null ? null : String.valueOf(value);
+            handleDoorbellState(which, state, true);
+        });
+    }
+
+    private void handleDoorbellState(int which, String state, boolean fromPoll) {
+        String entity = which == 1 ? doorbellEntity : doorbellEntity2;
+        if (entity.isEmpty()) return;
+
+        boolean initialSeen = which == 1 ? doorbellInitialSeen : doorbellInitialSeen2;
+        String lastState = which == 1 ? lastDoorbellState : lastDoorbellState2;
+        boolean trigger = false;
+
+        if (!initialSeen) {
+            // When polling starts while a person is already present, showing
+            // the camera is useful; subscription bootstrap events stay quiet.
+            trigger = fromPoll && "on".equalsIgnoreCase(state);
+            initialSeen = true;
+        } else if (entity.startsWith("event.")) {
+            trigger = !Objects.equals(lastState, state);
+        } else {
+            trigger = "on".equalsIgnoreCase(state) && !"on".equalsIgnoreCase(lastState);
+        }
+
+        if (which == 1) {
+            doorbellInitialSeen = initialSeen;
+            lastDoorbellState = state;
+        } else {
+            doorbellInitialSeen2 = initialSeen;
+            lastDoorbellState2 = state;
+        }
+
+        if (trigger && fotooActive()) main.post(this::showDoorbell);
+    }
+
+    private void pollSimpleTextEntity(String entity, boolean playlist) {
+        if (host == null || entity.isEmpty()) return;
+        if (playlist ? playlistPollPending : nextTrackPollPending) return;
+        if (playlist) playlistPollPending = true; else nextTrackPollPending = true;
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("entityId", entity);
+        host.executeCommand("getHaEntityState", args, (ok, data, error) -> {
+            if (playlist) playlistPollPending = false; else nextTrackPollPending = false;
+            if (!ok || !(data instanceof Map)) return;
+            Object value = ((Map<?, ?>) data).get("state");
+            String state = value == null ? "" : String.valueOf(value);
+            if (playlist) playlistState = state; else nextTrackState = state;
+            main.post(this::updateNowPlaying);
+        });
     }
 
     private boolean mediaVisible() {
@@ -680,6 +830,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (doorbellLabel != null) {
             doorbellLabel.setText(cameraTestMode ? "Dørklokke – TEST" : "Dørklokke");
         }
+        pollCameraEntity();
         refreshDoorbellImage();
         main.post(cameraRefreshTask);
         if (!cameraTestMode) {
@@ -747,7 +898,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.7.2 test");
+        test.setText("Fotoo Overlay 0.7.3 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(

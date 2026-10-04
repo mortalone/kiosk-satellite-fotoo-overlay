@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo with simultaneous Now Playing and doorbell camera, dual triggers, true 0-100% per-overlay opacity, progress, playlist/next-track metadata, camera test mode and instant attach/test mode.",
+  "description": "Native Android overlays above Fotoo with robust live polling for Now Playing, simultaneous camera, dual triggers, true opacity, progress, playlist/next-track metadata, camera test mode and instant attach.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
