@@ -22,7 +22,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "0.1.0"
+from PIL import Image, ImageOps
+
+APP_VERSION = "0.2.0"
 OPTIONS_PATH = Path("/data/options.json")
 STATE_PATH = Path("/data/state.json")
 MEDIA_ROOT = Path("/media/nature-frame")
@@ -134,29 +136,39 @@ def output_orientation(variant: str) -> str:
     return "portrait" if variant == "portrait" else "landscape"
 
 
-def safe_filename(species_dir: str) -> str:
-    # Upstream names are already safe slugs such as 12942-eastern-bluebird.
-    # Keep the taxon id in the filename to avoid any name collisions.
-    return re.sub(r"[^A-Za-z0-9._-]+", "-", species_dir).strip("-") + ".png"
+def safe_filename(species_dir: str, optimized: bool) -> str:
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", species_dir).strip("-")
+    return stem + (".jpg" if optimized else ".png")
 
 
-def download_file(url: str, target: Path) -> None:
+def download_file(url: str, target: Path, optimize_images: bool, jpeg_quality: int, max_long_edge: int) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(prefix=target.name + ".", dir=str(target.parent))
+    fd, download_name = tempfile.mkstemp(prefix=target.stem + ".download.", dir=str(target.parent))
     os.close(fd)
-    tmp = Path(tmp_name)
+    downloaded = Path(download_name)
+    fd, output_name = tempfile.mkstemp(prefix=target.stem + ".output.", dir=str(target.parent))
+    os.close(fd)
+    output = Path(output_name)
     try:
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=90) as response, tmp.open("wb") as out:
+        with urllib.request.urlopen(req, timeout=90) as response, downloaded.open("wb") as out:
             shutil.copyfileobj(response, out, length=1024 * 1024)
-        if tmp.stat().st_size < 1024:
+        if downloaded.stat().st_size < 1024:
             raise RuntimeError(f"Downloaded file is unexpectedly small: {url}")
-        os.replace(tmp, target)
+        if optimize_images:
+            with Image.open(downloaded) as image:
+                image = ImageOps.exif_transpose(image).convert("RGB")
+                if max(image.size) > max_long_edge:
+                    image.thumbnail((max_long_edge, max_long_edge), Image.Resampling.LANCZOS)
+                image.save(output, format="JPEG", quality=jpeg_quality, optimize=True, progressive=True, subsampling="4:2:0")
+        else:
+            shutil.copyfile(downloaded, output)
+        if output.stat().st_size < 1024:
+            raise RuntimeError(f"Processed file is unexpectedly small: {url}")
+        os.replace(output, target)
     finally:
-        try:
-            tmp.unlink()
-        except FileNotFoundError:
-            pass
+        downloaded.unlink(missing_ok=True)
+        output.unlink(missing_ok=True)
 
 
 def write_attribution(collection: GithubTreeCollection, root: Path) -> None:
@@ -174,6 +186,9 @@ def sync_collection(
     collection: GithubTreeCollection,
     orientation: str,
     delete_removed: bool,
+    optimize_images: bool,
+    jpeg_quality: int,
+    max_long_edge: int,
     state: dict[str, Any],
 ) -> dict[str, Any]:
     log(f"Checking {collection.title} ({orientation}) …")
@@ -187,11 +202,9 @@ def sync_collection(
         if not match or match.group("variant") not in variants:
             continue
         folder = output_orientation(match.group("variant"))
-        rel = f"{folder}/{safe_filename(match.group('species'))}"
-        desired[rel] = {
-            "path": path,
-            "sha": str(item.get("sha", "")),
-        }
+        rel = f"{folder}/{safe_filename(match.group('species'), optimize_images)}"
+        transform = f"jpg:q{jpeg_quality}:m{max_long_edge}" if optimize_images else "png:original"
+        desired[rel] = {"path": path, "sha": f"{item.get('sha', '')}:{transform}"}
 
     if not desired:
         raise RuntimeError(f"No images found in {collection.repo}; refusing to modify local media")
@@ -207,15 +220,15 @@ def sync_collection(
 
     for rel, info in sorted(desired.items()):
         target = root / rel
-        blob_sha = info["sha"]
-        next_files[rel] = blob_sha
-        if target.is_file() and previous_files.get(rel) == blob_sha:
+        state_sha = info["sha"]
+        next_files[rel] = state_sha
+        if target.is_file() and previous_files.get(rel) == state_sha:
             continue
         raw_url = (
             f"https://raw.githubusercontent.com/{collection.repo}/{commit_sha}/"
             f"{info['path']}"
         )
-        jobs.append((rel, raw_url, target, blob_sha))
+        jobs.append((rel, raw_url, target, state_sha))
 
     if jobs:
         log(f"{collection.title}: downloading {len(jobs)} new/changed image(s) …")
@@ -223,7 +236,7 @@ def sync_collection(
         failures: list[tuple[str, str]] = []
         with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as executor:
             futures = {
-                executor.submit(download_file, url, target): rel
+                executor.submit(download_file, url, target, optimize_images, jpeg_quality, max_long_edge): rel
                 for rel, url, target, _ in jobs
             }
             for future in as_completed(futures):
@@ -257,11 +270,13 @@ def sync_collection(
             source_variant = "portrait" if folder == "portrait" else "display"
             if source_variant not in variants:
                 continue
-            for file in directory.glob("*.png"):
+            for file in directory.iterdir():
+                if not file.is_file() or file.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+                    continue
                 rel = f"{folder}/{file.name}"
                 if rel not in current_names:
                     file.unlink(missing_ok=True)
-                    log(f"Removed upstream-deleted image: {rel}")
+                    log(f"Removed obsolete image: {rel}")
 
     return {
         "source_commit": commit_sha,
@@ -275,6 +290,9 @@ def options() -> dict[str, Any]:
     return {
         "inky_birds": bool(raw.get("inky_birds", True)),
         "orientation": str(raw.get("orientation", "portrait")),
+        "optimize_images": bool(raw.get("optimize_images", True)),
+        "jpeg_quality": max(70, min(95, int(raw.get("jpeg_quality", 88)))),
+        "max_long_edge": max(800, min(2400, int(raw.get("max_long_edge", 1600)))),
         "update_interval_hours": max(1, min(168, int(raw.get("update_interval_hours", 24)))),
         "delete_removed": bool(raw.get("delete_removed", True)),
     }
@@ -296,6 +314,9 @@ def sync_once() -> bool:
                 COLLECTIONS["inky_birds"],
                 orientation,
                 opts["delete_removed"],
+                opts["optimize_images"],
+                opts["jpeg_quality"],
+                opts["max_long_edge"],
                 state,
             )
             write_json(STATE_PATH, state)
@@ -305,17 +326,19 @@ def sync_once() -> bool:
     else:
         log("Inky Bird Frame is disabled; existing files are left untouched")
 
+    collections: dict[str, Any] = {}
+    if opts["inky_birds"]:
+        collections["birds"] = {
+            "source": "Inky Bird Frame",
+            "portrait": str(MEDIA_ROOT / "birds" / "portrait"),
+            "landscape": str(MEDIA_ROOT / "birds" / "landscape"),
+        }
     index = {
-        "version": 1,
+        "version": 2,
         "updated_at": int(time.time()),
         "orientation": orientation,
-        "collections": {
-            "birds": {
-                "source": "Inky Bird Frame",
-                "portrait": str(MEDIA_ROOT / "birds" / "portrait"),
-                "landscape": str(MEDIA_ROOT / "birds" / "landscape"),
-            }
-        },
+        "optimized": opts["optimize_images"],
+        "collections": collections,
     }
     write_json(MEDIA_ROOT / "index.json", index)
     return ok
