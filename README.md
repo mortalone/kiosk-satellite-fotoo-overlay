@@ -3,75 +3,72 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay 0.10.8
+## Screensaver Overlay 0.11.0
+
+Overlay behavior is unchanged from 0.10.x. The repository release packages
+Nature Frame 0.8.0.
 
 The overlay listens to Kiosk Satellite's official `screensaver.state` and
 `screensaver.view` plugin events, so it works above Kiosk Satellite's own
 screensavers, including Home Assistant Media / Nature Frame.
 
-The plugin manifest now stays within Kiosk Satellite's hard limit of **20
-settings**:
+## Nature Frame 0.8.0
 
-- the two destination toggles are consolidated into one **Show overlays on**
-  selector;
-- **Camera test mode** is no longer a persistent setting and is available as
-  **Show doorbell camera test** / **Hide doorbell camera test** actions.
+Nature Frame has one independent profile per tablet/screen. Each profile has its
+own collection switches, target display ratio and now its own **framing/fill
+method**.
 
-Existing Now Playing, Music Assistant, progress and doorbell camera behavior is
-otherwise preserved.
+Configure a profile under:
 
-## Nature Frame 0.7.4
+**Settings -> Devices & services -> Nature Frame -> Configure**
 
-Nature Frame now has **one independent profile per tablet/screen**.
+Available empty-area fill methods:
 
-The existing installation becomes the backwards-compatible **Default** profile.
-Add another Nature Frame integration entry for every screen that needs its own
-mix, for example **Køkken tablet**, **Stue** or **1. sal hub**.
+- **Off**
+- **Solid color**
+- **Edge stretch**
+- **Edge stretch + blur**
+- **Mirror**
 
-Each profile has:
+**Edge stretch** and **Edge stretch + blur** preserve the colors along the
+actual image edge. For example, if the top edge contains blue on the left and
+cream on the right, those colors continue upward independently instead of
+becoming one averaged color.
 
-- its own Home Assistant device;
-- its own collection switches;
-- its own Media Source folder under
-  **Nature Frame -> Screens / profiles -> <profile>**.
+The profile also exposes:
 
-Nature Frame 0.7.1 also exposes a representative collection thumbnail through
-each switch entity's `entity_picture`, so Home Assistant's built-in Picture
-Entity card can be used as a visual album selector.
+- **Edge sample size**: 1–32 px
+- **Edge blur radius**: 0–30 px
 
-Each Kiosk Satellite screen is then pointed at that profile's Portrait or
-Landscape folder. The profile—not the switch itself—is what associates a set of
-collections with a particular tablet.
+New profiles default to **Edge stretch + blur**, 8 px sample and 10 px blur.
+Existing profiles keep the previous Solid color behavior until changed.
 
-Curated collections include Birds, Zoo Public/Private, the three coherent
-Kitchen series, Kitchen Mixed, Art Misc, mammal collections and astronomy.
+Use Kiosk Satellite **Fill the screen = Off**. Nature Frame creates the full
+screen-ratio canvas itself while keeping the complete artwork visible.
 
-## Kiosk Satellite media setup
+### Per-screen media source
 
-For a named profile, choose:
+Choose:
 
-**Nature Frame -> Screens / profiles -> <that screen> -> Portrait/Landscape**
+**Nature Frame -> Screens / profiles -> <screen> -> Portrait/Landscape**
 
-Enable Shuffle.
+Legacy `active/portrait` and `active/landscape` paths remain compatible with
+the first/Default profile.
 
-Legacy paths `media-source://nature_frame/active/portrait` and
-`.../landscape` still resolve to the first/Default profile.
+### Collections
 
-On the tested setup, **Fill the screen = Smart** can crop poster-style artwork.
-Use **Fill the screen = Off** if the whole image must remain visible until the
-dedicated ambient/blurred no-crop renderer is added.
+Curated collections include Birds, Zoo Public/Private, Kitchen USDA/Köhler/
+Mrs Beeton/Mixed, Art Misc, mammal collections and astronomy. Multiple
+collections can be enabled simultaneously.
+
+Private Zoo images belong in:
+
+`/media/nature-frame/private/Zoo Private/`
+
+Private collection contents, thumbnails and image counts refresh automatically.
 
 ## Install
 
-Use the repository in both Kiosk Satellite Plugin Manager and HACS:
+Use this repository in both Kiosk Satellite Plugin Manager and HACS:
 
 `https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
-
-
-### Nature Frame solid framing
-
-Nature Frame 0.7.2 pre-frames screen-profile images to the configured target
-aspect ratio. Empty bars use solid median colors sampled from the adjacent
-image edge, so poster-style artwork keeps its full frame without black bars.
-
-Use Kiosk Satellite **Fill the screen = Off** with this mode.
