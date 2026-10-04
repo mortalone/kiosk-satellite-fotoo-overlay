@@ -3,78 +3,62 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay 0.10.1
+## Screensaver Overlay 0.10.3
 
-The plugin now listens to Kiosk Satellite's official `screensaver.state` and
-`screensaver.view` plugin events.
+The overlay listens to Kiosk Satellite's official `screensaver.state` and
+`screensaver.view` plugin events, so it works above Kiosk Satellite's own
+screensavers, including Home Assistant Media / Nature Frame.
 
-That means the existing custom overlays can run over Kiosk Satellite's own
-screensavers, including the Home Assistant Media/Nature Frame slideshow:
+The plugin manifest now stays within Kiosk Satellite's hard limit of **20
+settings**:
 
-- the custom Now Playing card with artwork, title, artist, progress and the
-  existing optional playlist/next-track fields;
-- the doorbell/person camera overlay with the existing trigger and sizing
-  settings;
-- Fotoo remains supported independently.
+- the two destination toggles are consolidated into one **Show overlays on**
+  selector;
+- **Camera test mode** is no longer a persistent setting and is available as
+  **Show doorbell camera test** / **Hide doorbell camera test** actions.
 
-Two settings control where the overlays appear:
+Existing Now Playing, Music Assistant, progress and doorbell camera behavior is
+otherwise preserved.
 
-- **Show on Kiosk Satellite screensavers** — enabled by default.
-- **Show on Fotoo** — enabled by default.
+## Nature Frame 0.7.0
 
-Black/blank Kiosk Satellite screensavers are deliberately left untouched.
+Nature Frame now has **one independent profile per tablet/screen**.
 
-The old **Attach / show overlays now** command remains available as a manual
-preview/fallback, but it is no longer needed for normal Kiosk Satellite
-screensaver operation.
+The existing installation becomes the backwards-compatible **Default** profile.
+Add another Nature Frame integration entry for every screen that needs its own
+mix, for example **Køkken tablet**, **Stue** or **1. sal hub**.
 
-## Nature Frame 0.6.0
+Each profile has:
 
-This repository also packages the **Nature Frame** Home Assistant integration.
+- its own Home Assistant device;
+- its own collection switches;
+- its own Media Source folder under
+  **Nature Frame -> Screens / profiles -> <profile>**.
 
-Curated collections include:
+Each Kiosk Satellite screen is then pointed at that profile's Portrait or
+Landscape folder. The profile—not the switch itself—is what associates a set of
+collections with a particular tablet.
 
-- Birds · Inky Bird Frame
-- Zoo · Public · Swainson
-- Zoo · Private
-- Kitchen · USDA Pomological Watercolors
-- Kitchen · Köhler Botanical Plates
-- Kitchen · Mrs Beeton Plates
-- Kitchen · Mixed
-- Art · Misc · Curated
-- existing mammal and astronomy collections
-
-Multiple collections can be enabled simultaneously using Home Assistant switch
-entities. The Active collections playlist is balanced per collection so large
-libraries do not drown out small private albums.
-
-Private Zoo images belong in:
-
-`/media/nature-frame/private/Zoo Private/`
-
-Nature Frame creates that folder automatically.
+Curated collections include Birds, Zoo Public/Private, the three coherent
+Kitchen series, Kitchen Mixed, Art Misc, mammal collections and astronomy.
 
 ## Kiosk Satellite media setup
 
-Point the Kiosk Satellite screensaver at one of the stable Nature Frame sources:
+For a named profile, choose:
 
-- `media-source://nature_frame/active/portrait`
-- `media-source://nature_frame/active/landscape`
+**Nature Frame -> Screens / profiles -> <that screen> -> Portrait/Landscape**
 
 Enable Shuffle.
 
+Legacy paths `media-source://nature_frame/active/portrait` and
+`.../landscape` still resolve to the first/Default profile.
+
 On the tested setup, **Fill the screen = Smart** can crop poster-style artwork.
-Use **Fill the screen = Off** when the complete artwork must be preserved until
-the dedicated ambient/blurred no-crop renderer is added.
+Use **Fill the screen = Off** if the whole image must remain visible until the
+dedicated ambient/blurred no-crop renderer is added.
 
-## Install the overlay plugin
+## Install
 
-Use Kiosk Satellite **Plugin Manager -> Add plugin** and paste:
+Use the repository in both Kiosk Satellite Plugin Manager and HACS:
 
 `https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
-
-## Install Nature Frame
-
-Add the same repository to HACS as a custom integration and install
-**Nature Frame**. The repository/plugin and Nature Frame integration keep
-separate semantic versions.
