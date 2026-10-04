@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Screensaver Overlay",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
   "description": "Native Now Playing and doorbell overlays for Kiosk Satellite screensavers and Fotoo, with Music Assistant queue tracking, artwork retry and camera triggers.",
@@ -175,28 +175,16 @@
       "description": "Camera visibility. At 100% the camera window is rendered as a fully opaque RGB surface. Touches inside the camera rectangle are then consumed by the overlay; outside it they still reach Fotoo."
     },
     {
-      "key": "cameraWidthPercent",
+      "key": "cameraSizePercent",
       "type": "number",
-      "title": "Camera width",
+      "title": "Camera size",
       "default": 90,
       "min": 30,
       "max": 100,
       "step": 5,
       "unit": "%",
       "group": "Doorbell",
-      "description": "Width of the camera overlay as a percentage of the screen width."
-    },
-    {
-      "key": "cameraHeightPercent",
-      "type": "number",
-      "title": "Camera height",
-      "default": 55,
-      "min": 20,
-      "max": 90,
-      "step": 5,
-      "unit": "%",
-      "group": "Doorbell",
-      "description": "Height of the camera overlay as a percentage of the screen height."
+      "description": "Camera width as a percentage of the screen. Height follows the actual camera frame aspect ratio automatically."
     },
     {
       "key": "cameraPosition",
