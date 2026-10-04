@@ -1250,7 +1250,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
         test.setTag("fotoo-overlay:test");
-        test.setText("Fotoo Overlay 0.8.6 test");
+        test.setText("Fotoo Overlay 0.8.7 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(

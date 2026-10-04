@@ -2,7 +2,10 @@
 
 Native Android system overlays above Fotoo while Fotoo runs as the Android screensaver.
 
-## 0.8.6
+## 0.8.7
+
+- Packaging release so the bundled Nature Frame Home Assistant integration is present in the latest stable tag and can pass HACS repository-structure validation.
+
 
 - Fixes the initial missing cover-art race: if a track/image changes while an older artwork request is still in flight, the new image is fetched immediately afterwards.
 - Artwork fetches retry when Music Assistant publishes the track before its image proxy is ready.
