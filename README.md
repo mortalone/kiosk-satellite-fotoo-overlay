@@ -2,7 +2,7 @@
 
 Native Android system overlays above Fotoo while Fotoo runs as the Android screensaver.
 
-## 0.7.3
+## 0.7.4
 
 - Now Playing and doorbell camera can be visible at the same time.
 - Two independent doorbell triggers can show the same camera.
@@ -15,6 +15,7 @@ Native Android system overlays above Fotoo while Fotoo runs as the Android scree
 - 100% opacity is now truly opaque. Previous versions used semi-transparent base backgrounds in addition to the opacity control, so even 100% could still look translucent.
 - Now Playing and doorbell state use active HA polling while Fotoo is visible, in addition to subscriptions. This fixes stale track metadata on Android builds that delay plugin entity callbacks while the Kiosk Activity is backgrounded.
 - Track progress now uses a local monotonic playback clock anchored to Home Assistant's media_position. It continues moving between Music Assistant state updates instead of freezing on the last published position.
+- Camera 100% now uses a hard solid mode: the overlay window stays at alpha 1.0, the camera bitmap uses image alpha 255, and an opaque black backing prevents Fotoo from bleeding through behind the camera.
 
 Recommended door triggers for this installation:
 

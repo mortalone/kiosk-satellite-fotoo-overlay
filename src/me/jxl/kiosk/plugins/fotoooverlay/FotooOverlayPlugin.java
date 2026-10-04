@@ -429,7 +429,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         forceOverlayPreview = Boolean.TRUE.equals(values.get("forceOverlayPreview"));
 
         if (nowPlayingView != null) nowPlayingView.setAlpha(nowPlayingOpacity / 100f);
-        if (doorbellView != null) doorbellView.setAlpha(cameraOpacity / 100f);
+        applyCameraVisibility();
 
         doorbellInitialSeen = false;
         lastDoorbellState = null;
@@ -793,11 +793,12 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
         if (doorbellView == null) {
             FrameLayout frame = new FrameLayout(context);
-            frame.setBackground(cardBackground(0xFF151517, 22));
-            frame.setAlpha(cameraOpacity / 100f);
+            frame.setBackground(cardBackground(0xFF000000, 22));
+            frame.setAlpha(1f);
 
             doorbellImage = new ImageView(context);
             doorbellImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            doorbellImage.setAlpha(1f);
             frame.addView(doorbellImage, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -821,6 +822,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             try {
                 windowManager.addView(frame, params);
                 doorbellView = frame;
+                applyCameraVisibility();
             } catch (Throwable error) {
                 host.status("Doorbell overlay failed: " + safeMessage(error), true);
                 return;
@@ -838,6 +840,27 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         }
     }
 
+    private void applyCameraVisibility() {
+        if (doorbellView != null) {
+            // Keep the window itself fully opaque. Applying alpha to the parent
+            // lets Android composite the entire overlay with Fotoo underneath,
+            // which is exactly what looked washed out even at the high end.
+            doorbellView.setAlpha(1f);
+            doorbellView.setBackground(cardBackground(0xFF000000, 22));
+        }
+        if (doorbellImage != null) {
+            if (cameraOpacity >= 100) {
+                // Hard solid mode: no alpha at all on the camera image.
+                doorbellImage.setAlpha(1f);
+                doorbellImage.setImageAlpha(255);
+            } else {
+                float alpha = Math.max(0.1f, Math.min(0.99f, cameraOpacity / 100f));
+                doorbellImage.setAlpha(alpha);
+                doorbellImage.setImageAlpha(255);
+            }
+        }
+    }
+
     private void refreshDoorbellImage() {
         if (cameraFetchPending || doorbellView == null || io == null) return;
         String picture = attr(cameraAttributes, "entity_picture", "");
@@ -851,6 +874,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                 cameraFetchPending = false;
                 if (bitmap != null && doorbellImage != null && doorbellView != null) {
                     doorbellImage.setImageBitmap(bitmap);
+                    applyCameraVisibility();
                 }
             });
         });
@@ -898,7 +922,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.7.3 test");
+        test.setText("Fotoo Overlay 0.7.4 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
