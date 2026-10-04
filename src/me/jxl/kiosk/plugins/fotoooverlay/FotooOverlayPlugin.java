@@ -8,8 +8,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
@@ -44,6 +46,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import me.jxl.kiosk.plugins.KioskPlugin;
 import me.jxl.kiosk.plugins.PluginHost;
@@ -89,6 +94,9 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private boolean showNextTrack = false;
     private int doorbellSeconds = 20;
     private int cameraOpacity = 100;
+    private int cameraWidthPercent = 92;
+    private int cameraHeightPercent = 55;
+    private String cameraPosition = "Center";
     private boolean cameraTestMode = false;
 
     private String haBaseUrl;
@@ -104,6 +112,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private boolean trigger2PollPending;
     private boolean playlistPollPending;
     private boolean nextTrackPollPending;
+    private String maBaseUrl = "";
+    private String maToken = "";
+    private String maPlayerId = "";
+    private boolean maQueuePollPending;
     private String playlistState = "";
     private String nextTrackState = "";
     private Map<?, ?> cameraAttributes = Collections.emptyMap();
@@ -132,7 +144,11 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private final Runnable liveStatePollTask = new Runnable() {
         @Override public void run() {
             if (!fotooActive() || host == null) return;
-            pollMediaEntity();
+            if (directMusicAssistantAvailable()) {
+                pollMusicAssistantQueue();
+            } else {
+                pollMediaEntity();
+            }
             if (doorbellView != null || cameraTestMode) pollCameraEntity();
             pollDoorbellTrigger(1);
             pollDoorbellTrigger(2);
@@ -189,6 +205,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         registerDreamReceiver();
         registerActivityLifecycle();
         applySettings(settings);
+        readKioskMusicAssistantConfig();
         readHomeAssistantBaseUrl();
         main.postDelayed(this::detectAlreadyRunningFotoo, 800);
         host.status("Ready. Fotoo DreamService is automatic. Use the 'Open Fotoo with overlay' action for manual app mode.", false);
@@ -225,7 +242,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         Object attrsValue = payload.get("attributes");
         Map<?, ?> attrs = attrsValue instanceof Map ? (Map<?, ?>) attrsValue : Collections.emptyMap();
 
-        if (entityId.equals(nowPlayingEntity)) {
+        if (entityId.equals(nowPlayingEntity) && !directMusicAssistantAvailable()) {
             applyMediaSnapshot(state, attrs);
         }
 
@@ -278,6 +295,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         trigger2PollPending = false;
         playlistPollPending = false;
         nextTrackPollPending = false;
+        maQueuePollPending = false;
         host = null;
         settings = null;
         context = null;
@@ -425,11 +443,19 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         doorbellSeconds = seconds instanceof Number ? Math.max(5, Math.min(60, ((Number) seconds).intValue())) : 20;
         Object camOpacity = values.get("cameraOpacity");
         cameraOpacity = camOpacity instanceof Number ? Math.max(10, Math.min(100, ((Number) camOpacity).intValue())) : 100;
+        Object camWidth = values.get("cameraWidthPercent");
+        cameraWidthPercent = camWidth instanceof Number ? Math.max(30, Math.min(100, ((Number) camWidth).intValue())) : 92;
+        Object camHeight = values.get("cameraHeightPercent");
+        cameraHeightPercent = camHeight instanceof Number ? Math.max(20, Math.min(90, ((Number) camHeight).intValue())) : 55;
+        String camPosition = stringSetting(values, "cameraPosition");
+        cameraPosition = "Top".equals(camPosition) || "Bottom".equals(camPosition) ? camPosition : "Center";
         cameraTestMode = Boolean.TRUE.equals(values.get("cameraTestMode"));
         forceOverlayPreview = Boolean.TRUE.equals(values.get("forceOverlayPreview"));
 
         if (nowPlayingView != null) nowPlayingView.setAlpha(nowPlayingOpacity / 100f);
-        applyCameraVisibility();
+        if (doorbellView != null) {
+            hideDoorbell();
+        }
 
         doorbellInitialSeen = false;
         lastDoorbellState = null;
@@ -487,7 +513,11 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             showDoorbell();
             pollCameraEntity();
         }
-        pollMediaEntity();
+        if (directMusicAssistantAvailable()) {
+            pollMusicAssistantQueue();
+        } else {
+            pollMediaEntity();
+        }
         updateNowPlaying();
     }
 
@@ -609,6 +639,207 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         return h > 0
                 ? String.format(java.util.Locale.ROOT, "%d:%02d:%02d", h, m, s)
                 : String.format(java.util.Locale.ROOT, "%d:%02d", m, s);
+    }
+
+    private void readKioskMusicAssistantConfig() {
+        if (context == null) return;
+        try {
+            SharedPreferences prefs =
+                    context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE);
+            maBaseUrl = prefs.getString("flutter.ks.sendspin.ma_url", "");
+            maToken = prefs.getString("flutter.ks.sendspin.ma_token", "");
+            String source = prefs.getString("flutter.ks.sendspin.player_source", "");
+            String player = prefs.getString("flutter.ks.sendspin.player", "");
+            if (player == null) player = "";
+            if (player.startsWith("ma:")) player = player.substring(3);
+            maPlayerId = "ma".equals(source) ? player.trim() : "";
+        } catch (Throwable ignored) {
+            maBaseUrl = "";
+            maToken = "";
+            maPlayerId = "";
+        }
+    }
+
+    private boolean directMusicAssistantAvailable() {
+        return !maBaseUrl.trim().isEmpty() &&
+                !maToken.trim().isEmpty() &&
+                !maPlayerId.trim().isEmpty();
+    }
+
+    private void pollMusicAssistantQueue() {
+        if (!directMusicAssistantAvailable() || maQueuePollPending || io == null) return;
+        maQueuePollPending = true;
+        final String base = maBaseUrl.trim().replaceAll("/+$", "");
+        final String token = maToken;
+        final String playerId = maPlayerId;
+        io.execute(() -> {
+            JSONObject queue = null;
+            HttpURLConnection connection = null;
+            InputStream stream = null;
+            try {
+                URL url = new URL(base + "/api");
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setConnectTimeout(2500);
+                connection.setReadTimeout(3500);
+                connection.setRequestMethod("POST");
+                connection.setDoOutput(true);
+                connection.setUseCaches(false);
+                connection.setRequestProperty("Authorization", "Bearer " + token);
+                connection.setRequestProperty("Accept", "application/json");
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+
+                JSONObject args = new JSONObject();
+                args.put("player_id", playerId);
+                JSONObject request = new JSONObject();
+                request.put("message_id", "fotoo-overlay");
+                request.put("command", "player_queues/get_active_queue");
+                request.put("args", args);
+                byte[] body = request.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(body.length);
+                try (java.io.OutputStream output = connection.getOutputStream()) {
+                    output.write(body);
+                }
+
+                if (connection.getResponseCode() >= 200 && connection.getResponseCode() < 300) {
+                    stream = connection.getInputStream();
+                    String json = readText(stream);
+                    JSONObject response = new JSONObject(json);
+                    Object result = response.opt("result");
+                    if (result instanceof JSONObject) queue = (JSONObject) result;
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                try { if (stream != null) stream.close(); } catch (Throwable ignored) {}
+                if (connection != null) connection.disconnect();
+            }
+
+            final JSONObject resultQueue = queue;
+            main.post(() -> {
+                maQueuePollPending = false;
+                if (resultQueue != null) applyMusicAssistantQueue(resultQueue, base);
+            });
+        });
+    }
+
+    private void applyMusicAssistantQueue(JSONObject queue, String base) {
+        JSONObject item = queue.optJSONObject("current_item");
+        if (item == null) return;
+        JSONObject media = item.optJSONObject("media_item");
+        if (media == null) media = new JSONObject();
+        JSONObject details = item.optJSONObject("streamdetails");
+        JSONObject live = details == null ? null : details.optJSONObject("stream_metadata");
+
+        String title = jsonText(live, "title");
+        if (title.isEmpty()) title = jsonText(media, "name");
+        if (title.isEmpty()) title = jsonText(item, "name");
+        if (title.isEmpty()) return;
+
+        String artist = jsonText(live, "artist");
+        if (artist.isEmpty()) {
+            JSONArray artists = media.optJSONArray("artists");
+            if (artists != null) {
+                StringBuilder joined = new StringBuilder();
+                for (int i = 0; i < artists.length(); i++) {
+                    JSONObject a = artists.optJSONObject(i);
+                    String name = jsonText(a, "name");
+                    if (name.isEmpty()) continue;
+                    if (joined.length() > 0) joined.append("/");
+                    joined.append(name);
+                }
+                artist = joined.toString();
+            }
+        }
+
+        String album = jsonText(live, "album");
+        if (album.isEmpty()) {
+            JSONObject albumObject = media.optJSONObject("album");
+            album = jsonText(albumObject, "name");
+        }
+
+        double duration = jsonNumber(live, "duration", 0);
+        if (duration <= 0) duration = jsonNumber(item, "duration", 0);
+        if (duration <= 0) duration = jsonNumber(media, "duration", 0);
+        double elapsed = jsonNumber(queue, "elapsed_time", 0);
+        String state = jsonText(queue, "state");
+        String queueItemId = jsonText(item, "queue_item_id");
+        if (queueItemId.isEmpty()) queueItemId = jsonText(media, "uri");
+
+        String artwork = jsonText(live, "image_url");
+        if (artwork.isEmpty()) artwork = musicAssistantArtwork(item.opt("image"), base);
+
+        Map<String, Object> attrs = new HashMap<>();
+        attrs.put("media_title", title);
+        if (!artist.isEmpty()) attrs.put("media_artist", artist);
+        if (!album.isEmpty()) attrs.put("media_album_name", album);
+        if (duration > 0) attrs.put("media_duration", duration);
+        attrs.put("media_position", elapsed);
+        attrs.put("media_content_id", queueItemId);
+        if (!artwork.isEmpty()) attrs.put("entity_picture", artwork);
+
+        String queueName = jsonText(queue, "display_name");
+        if (!queueName.isEmpty()) attrs.put("source", queueName);
+
+        JSONObject nextItem = queue.optJSONObject("next_item");
+        String nextTitle = musicAssistantItemTitle(nextItem);
+        if (!nextTitle.isEmpty()) nextTrackState = nextTitle;
+
+        applyMediaSnapshot(state, attrs);
+    }
+
+    private static String musicAssistantItemTitle(JSONObject item) {
+        if (item == null) return "";
+        JSONObject media = item.optJSONObject("media_item");
+        String title = jsonText(media, "name");
+        if (title.isEmpty()) title = jsonText(item, "name");
+        return title;
+    }
+
+    private static String musicAssistantArtwork(Object image, String base) {
+        JSONObject obj = image instanceof JSONObject ? (JSONObject) image : null;
+        if (obj == null && image instanceof JSONArray) {
+            JSONArray arr = (JSONArray) image;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject candidate = arr.optJSONObject(i);
+                if (candidate == null) continue;
+                if ("thumb".equals(jsonText(candidate, "type"))) {
+                    obj = candidate;
+                    break;
+                }
+                if (obj == null) obj = candidate;
+            }
+        }
+        if (obj == null) return "";
+        String path = jsonText(obj, "path");
+        if (obj.optBoolean("remotely_accessible", false) &&
+                (path.startsWith("http://") || path.startsWith("https://"))) {
+            return path;
+        }
+        String proxy = jsonText(obj, "proxy_id");
+        return proxy.isEmpty() ? "" : base + "/imageproxy/" + proxy + "?size=512&fmt=jpg";
+    }
+
+    private static String jsonText(JSONObject object, String key) {
+        if (object == null) return "";
+        Object value = object.opt(key);
+        return value == null || value == JSONObject.NULL ? "" : String.valueOf(value).trim();
+    }
+
+    private static double jsonNumber(JSONObject object, String key, double fallback) {
+        if (object == null) return fallback;
+        Object value = object.opt(key);
+        if (value instanceof Number) return ((Number) value).doubleValue();
+        if (value != null) {
+            try { return Double.parseDouble(String.valueOf(value)); } catch (Throwable ignored) {}
+        }
+        return fallback;
+    }
+
+    private static String readText(InputStream stream) throws java.io.IOException {
+        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+        byte[] chunk = new byte[4096];
+        int count;
+        while ((count = stream.read(chunk)) >= 0) buffer.write(chunk, 0, count);
+        return buffer.toString("UTF-8");
     }
 
     private void pollMediaEntity() {
@@ -814,10 +1045,22 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             labelParams.topMargin = dp(14);
             frame.addView(label, labelParams);
 
-            int width = Math.min(dp(780), Math.max(dp(320), context.getResources().getDisplayMetrics().widthPixels - dp(28)));
-            int height = Math.min(dp(520), Math.max(dp(260), context.getResources().getDisplayMetrics().heightPixels * 55 / 100));
-            WindowManager.LayoutParams params = overlayParams(width, height);
-            params.gravity = Gravity.CENTER;
+            int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
+            int screenHeight = context.getResources().getDisplayMetrics().heightPixels;
+            int width = Math.max(dp(240), screenWidth * cameraWidthPercent / 100);
+            int height = Math.max(dp(180), screenHeight * cameraHeightPercent / 100);
+            width = Math.min(screenWidth, width);
+            height = Math.min(screenHeight, height);
+            WindowManager.LayoutParams params = cameraOverlayParams(width, height);
+            if ("Top".equals(cameraPosition)) {
+                params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                params.y = dp(18);
+            } else if ("Bottom".equals(cameraPosition)) {
+                params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+                params.y = dp(18);
+            } else {
+                params.gravity = Gravity.CENTER;
+            }
 
             try {
                 windowManager.addView(frame, params);
@@ -873,7 +1116,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             main.post(() -> {
                 cameraFetchPending = false;
                 if (bitmap != null && doorbellImage != null && doorbellView != null) {
-                    doorbellImage.setImageBitmap(bitmap);
+                    Bitmap shown = cameraOpacity >= 100 ? opaqueBitmap(bitmap) : bitmap;
+                    doorbellImage.setImageBitmap(shown);
                     applyCameraVisibility();
                 }
             });
@@ -922,7 +1166,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.7.4 test");
+        test.setText("Fotoo Overlay 0.8.0 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
@@ -937,6 +1181,37 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         } catch (Throwable error) {
             host.status("Test overlay failed: " + safeMessage(error), true);
         }
+    }
+
+    private Bitmap opaqueBitmap(Bitmap source) {
+        if (source == null) return null;
+        try {
+            Bitmap opaque = Bitmap.createBitmap(
+                    source.getWidth(), source.getHeight(), Bitmap.Config.RGB_565);
+            Canvas canvas = new Canvas(opaque);
+            canvas.drawColor(Color.BLACK);
+            canvas.drawBitmap(source, 0, 0, null);
+            return opaque;
+        } catch (Throwable ignored) {
+            return source;
+        }
+    }
+
+    private WindowManager.LayoutParams cameraOverlayParams(int width, int height) {
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                width,
+                height,
+                Build.VERSION.SDK_INT >= 26
+                        ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        : WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                cameraOpacity >= 100 ? PixelFormat.OPAQUE : PixelFormat.TRANSLUCENT
+        );
+        params.alpha = 1f;
+        return params;
     }
 
     private WindowManager.LayoutParams overlayParams(int width, int height) {

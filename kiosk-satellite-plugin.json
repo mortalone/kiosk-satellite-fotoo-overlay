@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo with live Now Playing polling, simultaneous camera, dual triggers, true solid camera mode, progress, playlist/next-track metadata, camera test mode and instant attach.",
+  "description": "Native Android overlays above Fotoo with direct Music Assistant queue tracking, simultaneous doorbell camera, dual triggers, solid camera rendering, adjustable camera size/position, progress and instant attach.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
@@ -155,6 +155,43 @@
       "unit": "%",
       "group": "Doorbell",
       "description": "Camera image visibility. 100% uses a hard solid mode: fully opaque camera pixels on an opaque black backing, with no parent-layer translucency."
+    },
+    {
+      "key": "cameraWidthPercent",
+      "type": "number",
+      "title": "Camera width",
+      "default": 92,
+      "min": 30,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "group": "Doorbell",
+      "description": "Width of the camera overlay as a percentage of the screen width."
+    },
+    {
+      "key": "cameraHeightPercent",
+      "type": "number",
+      "title": "Camera height",
+      "default": 55,
+      "min": 20,
+      "max": 90,
+      "step": 5,
+      "unit": "%",
+      "group": "Doorbell",
+      "description": "Height of the camera overlay as a percentage of the screen height."
+    },
+    {
+      "key": "cameraPosition",
+      "type": "select",
+      "title": "Camera position",
+      "default": "Center",
+      "options": [
+        "Top",
+        "Center",
+        "Bottom"
+      ],
+      "group": "Doorbell",
+      "description": "Vertical position of the camera overlay."
     },
     {
       "key": "doorbellSeconds",
