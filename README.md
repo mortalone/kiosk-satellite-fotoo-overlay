@@ -1,20 +1,55 @@
 # Fotoo Overlay for Kiosk Satellite
 
-Native Android system overlays above Fotoo while Fotoo runs as the Android screensaver.
+Native Android system overlays above Fotoo while Fotoo runs as the Android
+screensaver. This repository also packages the **Nature Frame** Home Assistant
+integration.
 
-## Fotoo Overlay 0.8.9
+## Repository release 0.9.0
 
-- Fixes the initial missing cover-art race: if a track/image changes while an older artwork request is still in flight, the new image is fetched immediately afterwards.
-- Artwork fetches retry when Music Assistant publishes the track before its image proxy is ready.
-- A cover already supplied by the selected Home Assistant media_player is retained while a Music Assistant queue snapshot temporarily has no image.
-- Camera visibility at 100% uses an RGB_565 Android overlay surface and removes FLAG_NOT_TOUCHABLE, giving the camera a solid surface.
-- At 100% the camera rectangle consumes touches; touches outside the camera still reach Fotoo. Below 100%, the camera remains pass-through.
-- Existing lifecycle cleanup, direct Music Assistant queue tracking, dual door triggers, camera sizing/position and simultaneous Now Playing + camera remain supported.
+### Fotoo Overlay
 
-Recommended door triggers:
+The overlay plugin version is bumped to 0.9.0 as a packaging release so Kiosk
+Satellite and HACS can reference the same repository release. Overlay behavior
+is unchanged from 0.8.9.
 
-- Trigger 1: `binary_sensor.doorbellcamera_person_occupancy`
-- Trigger 2: `binary_sensor.reolink_video_doorbell_wifi_visitor`
+### Nature Frame 0.6.0
+
+Nature Frame now provides curated, visually coherent collections rather than
+using broad topical scraping for named libraries:
+
+- Birds · Inky Bird Frame
+- Zoo · Public · Swainson
+- Zoo · Private
+- Kitchen · USDA Pomological Watercolors
+- Kitchen · Köhler Botanical Plates
+- Kitchen · Mrs Beeton Plates
+- Kitchen · Mixed
+- Art · Misc · Curated
+- existing mammal and astronomy collections
+
+Multiple collections can be enabled simultaneously using Home Assistant switch
+entities. The Active collections playlist is balanced per collection so huge
+libraries do not drown out small private albums.
+
+Private Zoo images belong in:
+
+`/media/nature-frame/private/Zoo Private/`
+
+Nature Frame creates that folder automatically.
+
+## Kiosk Satellite media setup
+
+Point the screensaver at the stable Nature Frame media source:
+
+- `media-source://nature_frame/active/portrait`
+- `media-source://nature_frame/active/landscape`
+
+Enable Shuffle in Kiosk Satellite.
+
+**Important:** on the tested setup, Kiosk Satellite's **Fill the screen = Smart**
+can crop poster-style artwork. Use **Fill the screen = Off** while testing if the
+whole image must remain visible. A dedicated ambient/blurred no-crop renderer is
+a separate follow-up feature.
 
 ## Install Fotoo Overlay
 
@@ -22,22 +57,8 @@ Use Kiosk Satellite **Plugin Manager -> Add plugin** and paste:
 
 `https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
 
----
+## Install Nature Frame
 
-## Home Assistant integration: Nature Frame 0.5.0
-
-The same repository contains **Nature Frame**, a streaming Home Assistant Media
-Source designed for Kiosk Satellite photo screensavers.
-
-Nature Frame 0.5.0 adds:
-
-- multiple simultaneously active collections through Home Assistant switches;
-- a Zoo art/poster collection from Wikimedia Commons;
-- private collections from `/media/nature-frame/private/<collection>/`;
-- thumbnails throughout the Home Assistant Media Browser;
-- stable `active/portrait` and `active/landscape` folders, so the kiosk source
-  does not need to change when collections are enabled or disabled.
-
-For Kiosk Satellite, use **Home Assistant Media**, enable **Shuffle**, and set
-**Fill the screen** to **Smart** for full-frame posters over a blurred ambient
-background instead of clipping.
+Add the same repository to HACS as a custom integration and install
+**Nature Frame**. The repository release and integration manifest are versioned
+separately: repository 0.9.0 contains Nature Frame 0.6.0.
