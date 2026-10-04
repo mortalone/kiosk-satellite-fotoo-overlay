@@ -1,27 +1,22 @@
 # Nature Frame Sync
 
-Synkroniserer kuraterede naturillustrationer til Home Assistants `/media`-mappe, så de kan bruges direkte af f.eks. Kiosk Satellite **Home Assistant Media**-pauseskærmen.
+Synkroniserer kuraterede naturillustrationer til Home Assistants `/media`-mappe til Kiosk Satellite.
 
-Første provider er [Inky Bird Frame](https://github.com/veteranbv/inky-bird-frame). Add-on'en downloader ikke hele upstream-repositoryet; den finder kun de relevante godkendte `portrait.png`/`display.png`-filer og springer uændrede billeder over ved senere synkroniseringer.
+## Lagerforbrug
+
+Inky Bird Frames originale portrait-PNG'er fylder ca. 526 MB. Fra 0.2.0 er **Optimize images** slået til som standard: billedet hentes, konverteres til JPEG og den store PNG-download kasseres igen.
+
+- `optimize_images: true`
+- `jpeg_quality: 88`
+- `max_long_edge: 1600`
+
+Der gemmes kun de samlinger, som er aktiveret. Fremtidige gallerier får egne toggles.
 
 ## Mapper
 
-- `/media/nature-frame/birds/portrait` – Inky `portrait.png`, 1200×1600
-- `/media/nature-frame/birds/landscape` – Inky `display.png`, 1600×1200
+- `/media/nature-frame/birds/portrait`
+- `/media/nature-frame/birds/landscape`
+- `/media/nature-frame/active/portrait`
+- `/media/nature-frame/active/landscape`
 
-Vælg den mappe, der passer til skærmens retning. `orientation: both` henter begge varianter.
-
-## Indstillinger
-
-- **inky_birds** – synkronisér Inky Bird Frame.
-- **orientation** – `portrait`, `landscape` eller `both`.
-- **update_interval_hours** – hvor ofte upstream kontrolleres.
-- **delete_removed** – fjern lokale billeder, der er fjernet fra upstream, i den/de retninger der synkroniseres.
-
-## Kiosk Satellite
-
-Vælg **Screensaver → Home Assistant Media** og vælg f.eks. `nature-frame/birds/portrait`. Slå Shuffle til, og vælg det ønskede interval/transition.
-
-## Andre dyr
-
-Koden bruger en provider-struktur, så flere kuraterede samlinger kan tilføjes senere uden at ændre mappestrukturen. Pattedyr, insekter, krybdyr osv. får deres egne mapper under `/media/nature-frame/`.
+Companion-integrationen styrer `active` fra Lovelace via `select.nature_frame_gallery`.
