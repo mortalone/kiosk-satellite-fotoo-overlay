@@ -1,5 +1,21 @@
 # Nature Frame changelog
 
+## 0.8.0
+
+- Adds per-profile selectable empty-area fill modes:
+  **Off**, **Solid color**, **Edge stretch**, **Edge stretch + blur** and
+  **Mirror**.
+- Edge stretch preserves different colors along the nearest image edge instead
+  of collapsing the entire top/bottom/side area into one dominant color.
+- Adds configurable edge sample size from 1–32 px.
+- Adds configurable blur radius from 0–30 px for Edge stretch + blur.
+- New profiles default to Edge stretch + blur (8 px sample, 10 px blur).
+- Existing profiles retain Solid color as the backwards-compatible default
+  until the option is changed.
+- Framing cache keys include method/sample/blur settings.
+- Local/private framed-cache invalidation now also includes source file size
+  and modification time, so replacing a poster at the same path regenerates it.
+
 ## 0.7.6
 
 - Automatically trims transparent outer padding before fitting private artwork.
