@@ -5,6 +5,7 @@ from homeassistant.util import slugify
 
 PROFILE_ID = "profile_id"
 PROFILE_NAME = "profile_name"
+SCREEN_RATIO = "screen_ratio"
 
 
 def entry_profile_name(entry: ConfigEntry) -> str:
@@ -24,3 +25,8 @@ def entry_profile_id(entry: ConfigEntry) -> str:
     if not entry.data.get(PROFILE_NAME):
         return "default"
     return slugify(entry_profile_name(entry)) or "profile"
+
+
+def entry_screen_ratio(entry: ConfigEntry) -> str:
+    value = entry.options.get(SCREEN_RATIO, entry.data.get(SCREEN_RATIO, "16:9"))
+    return str(value) if value else "16:9"
