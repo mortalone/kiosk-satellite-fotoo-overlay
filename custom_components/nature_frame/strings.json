@@ -3,10 +3,13 @@
     "step": {
       "user": {
         "title": "Add Nature Frame screen profile",
-        "description": "Create one profile for each tablet or screen that should have its own collection mix.",
+        "description": "Create one profile for each tablet or screen that should have its own collection mix and framing style.",
         "data": {
           "profile_name": "Screen / profile name",
-          "screen_ratio": "Screen aspect ratio"
+          "screen_ratio": "Screen aspect ratio",
+          "fill_method": "Empty-area fill method",
+          "fill_sample_size": "Edge sample size (px)",
+          "fill_blur_radius": "Edge blur radius (px)"
         }
       }
     },
@@ -17,10 +20,13 @@
   "options": {
     "step": {
       "init": {
-        "title": "Screen aspect ratio",
-        "description": "Choose the screen's landscape aspect ratio. Nature Frame automatically inverts it in portrait mode.",
+        "title": "Nature Frame display settings",
+        "description": "Choose the target screen ratio and how Nature Frame fills the unused space around images. Edge modes preserve color changes across the image edge instead of using one flat color.",
         "data": {
-          "screen_ratio": "Screen aspect ratio"
+          "screen_ratio": "Screen aspect ratio",
+          "fill_method": "Empty-area fill method",
+          "fill_sample_size": "Edge sample size (px)",
+          "fill_blur_radius": "Edge blur radius (px)"
         }
       }
     }
