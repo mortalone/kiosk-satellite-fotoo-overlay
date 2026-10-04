@@ -192,9 +192,12 @@ class NatureGallery:
     landscape: tuple[NatureImage, ...]
     is_private: bool = False
     is_virtual: bool = False
+    cover_thumbnail: str | None = None
 
     @property
     def thumbnail(self) -> str | None:
+        if self.cover_thumbnail:
+            return self.cover_thumbnail
         images = self.portrait or self.landscape
         return images[0].thumbnail or images[0].url if images else None
 
@@ -268,7 +271,7 @@ class NatureFrameCatalog:
         session = async_get_clientsession(self.hass)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "HomeAssistant-NatureFrame/0.7.1",
+            "User-Agent": "HomeAssistant-NatureFrame/0.7.4",
         }
         async with session.get(
             url, params=params, headers=headers, timeout=30
@@ -512,6 +515,21 @@ class NatureFrameCatalog:
         if not portrait and not landscape:
             return None
 
+        # Virtual collections reuse member images. Give them a deliberately
+        # different cover so their Lovelace tile is not visually identical to
+        # the first source collection.
+        cover_thumbnail = None
+        for member_key in reversed(member_keys):
+            member = galleries.get(member_key)
+            if not member:
+                continue
+            candidates = member.portrait or member.landscape
+            if not candidates:
+                continue
+            cover = candidates[min(len(candidates) - 1, max(1, len(candidates) // 2))]
+            cover_thumbnail = cover.thumbnail or cover.url
+            break
+
         return NatureGallery(
             key=key,
             title=title,
@@ -519,6 +537,7 @@ class NatureFrameCatalog:
             portrait=tuple(portrait),
             landscape=tuple(landscape),
             is_virtual=True,
+            cover_thumbnail=cover_thumbnail,
         )
 
     def _load_private_galleries(self) -> dict[str, NatureGallery]:
