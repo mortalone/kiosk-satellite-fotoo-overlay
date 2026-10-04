@@ -459,7 +459,6 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                 manualFotoo = false;
                 forceOverlayPreview = false;
                 main.removeCallbacks(forcePreviewTimeoutTask);
-                cleanupStaleInAppViews();
                 if (changed) updatePresentation();
             }
             @Override public void onActivityPaused(Activity activity) {
@@ -1243,20 +1242,29 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         int availableWidth = Math.max(dp(260), screenWidth - dp(24));
         int requestedWidth = screenWidth * nowPlayingWidthPercent / 100;
         int width = Math.min(availableWidth, Math.max(dp(260), requestedWidth));
-        WindowManager.LayoutParams params = overlayParams(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        int gravity;
+        int yOffset;
         if ("Top".equals(nowPlayingPosition)) {
-            params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-            params.y = dp(nowPlayingOffset);
+            gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            yOffset = dp(nowPlayingOffset);
         } else if ("Center".equals(nowPlayingPosition)) {
-            params.gravity = Gravity.CENTER;
-            params.y = 0;
+            gravity = Gravity.CENTER;
+            yOffset = 0;
         } else {
-            params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-            params.y = dp(nowPlayingOffset);
+            gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            yOffset = dp(nowPlayingOffset);
         }
 
         try {
-            windowManager.addView(card, params);
+            if (!addOverlayView(
+                    card,
+                    width,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    gravity,
+                    yOffset,
+                    false)) {
+                throw new IllegalStateException("No overlay host is available");
+            }
             nowPlayingView = card;
             main.removeCallbacks(progressTickTask);
             main.post(progressTickTask);
@@ -1336,19 +1344,23 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                 height = screenHeight;
                 width = Math.min(screenWidth, Math.round(height * 16f / 9f));
             }
-            WindowManager.LayoutParams params = cameraOverlayParams(width, height);
+            int gravity;
+            int yOffset;
             if ("Top".equals(cameraPosition)) {
-                params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-                params.y = dp(18);
+                gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                yOffset = dp(18);
             } else if ("Bottom".equals(cameraPosition)) {
-                params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-                params.y = dp(18);
+                gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+                yOffset = dp(18);
             } else {
-                params.gravity = Gravity.CENTER;
+                gravity = Gravity.CENTER;
+                yOffset = 0;
             }
 
             try {
-                windowManager.addView(frame, params);
+                if (!addOverlayView(frame, width, height, gravity, yOffset, true)) {
+                    throw new IllegalStateException("No overlay host is available");
+                }
                 doorbellView = frame;
                 applyCameraVisibility();
             } catch (Throwable error) {
@@ -1455,9 +1467,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         doorbellLabel = null;
         cameraFetchPending = false;
         doorbellHeldByTest = false;
-        if (view != null && windowManager != null) {
-            try { windowManager.removeViewImmediate(view); } catch (Throwable ignored) {}
-        }
+        removeOverlayView(view);
     }
 
     private void hideNowPlaying() {
@@ -1494,15 +1504,20 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         test.setText("Screensaver Overlay 0.11.3 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
-        WindowManager.LayoutParams params = overlayParams(
-                Math.min(dp(520), context.getResources().getDisplayMetrics().widthPixels - dp(32)),
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.gravity = Gravity.CENTER;
+        int width = Math.min(
+                dp(520),
+                context.getResources().getDisplayMetrics().widthPixels - dp(32));
         try {
-            windowManager.addView(test, params);
-            main.postDelayed(() -> {
-                try { windowManager.removeViewImmediate(test); } catch (Throwable ignored) {}
-            }, 8000);
+            if (!addOverlayView(
+                    test,
+                    width,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.CENTER,
+                    0,
+                    false)) {
+                throw new IllegalStateException("No overlay host is available");
+            }
+            main.postDelayed(() -> removeOverlayView(test), 8000);
         } catch (Throwable error) {
             host.status("Test overlay failed: " + safeMessage(error), true);
         }
