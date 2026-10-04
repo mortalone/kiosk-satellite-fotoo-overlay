@@ -5,6 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.util import slugify
 
 from .catalog import NatureFrameCatalog
 from .const import DOMAIN
@@ -46,6 +47,11 @@ class NatureFrameGallerySwitch(SwitchEntity):
         gallery = catalog.gallery(gallery_key)
 
         self._attr_name = gallery.title if gallery else gallery_key
+        self._attr_suggested_object_id = slugify(
+            f"nature_frame_{profile_id}_{gallery.title if gallery else gallery_key}"
+        )
+        self._attr_entity_picture = gallery.thumbnail if gallery else None
+        self._gallery = gallery
         # Keep existing IDs stable for the migrated Default profile.
         self._attr_unique_id = (
             f"nature_frame_gallery_{gallery_key}"
@@ -63,6 +69,29 @@ class NatureFrameGallerySwitch(SwitchEntity):
             manufacturer="Nature Frame",
             model="Screen collection profile",
         )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        gallery = self._gallery
+        if gallery is None:
+            return {
+                "profile": entry_profile_name(self.entry),
+                "gallery_key": self.gallery_key,
+            }
+        image_count = len(
+            {
+                image.key
+                for image in (*gallery.portrait, *gallery.landscape)
+            }
+        )
+        return {
+            "profile": entry_profile_name(self.entry),
+            "gallery_key": self.gallery_key,
+            "image_count": image_count,
+            "source": gallery.source,
+            "private": gallery.is_private,
+            "virtual": gallery.is_virtual,
+        }
 
     @property
     def is_on(self) -> bool:
