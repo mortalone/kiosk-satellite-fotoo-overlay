@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.7
+
+- Packages Nature Frame 0.7.3.
+- Adds fallback catalogues so the public Zoo/Kitchen switches remain available
+  even if Wikimedia API discovery fails at Home Assistant startup.
+- Keeps Screensaver Overlay behavior unchanged.
+
 ## 0.10.6
 
 - Packages the complete Nature Frame 0.7.2 implementation.
