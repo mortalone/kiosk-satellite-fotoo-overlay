@@ -1,5 +1,14 @@
 # Nature Frame changelog
 
+## 0.7.1
+
+- Exposes each collection's representative thumbnail through the switch
+  entity's `entity_picture`.
+- Adds profile, gallery key, image count, source and private/virtual metadata
+  attributes to collection switches.
+- Adds stable suggested entity IDs for newly created screen profiles.
+- Adds a native Lovelace Picture Entity grid example with tap-to-toggle.
+
 ## 0.7.0
 
 - Adds one independent collection profile per tablet/screen.
