@@ -1,9 +1,9 @@
 FROM ghcr.io/home-assistant/base:3.23
 
-ARG BUILD_VERSION="0.1.0"
+ARG BUILD_VERSION="0.2.0"
 ARG BUILD_ARCH=""
 
-RUN apk add --no-cache python3 ca-certificates
+RUN apk add --no-cache python3 py3-pillow ca-certificates
 
 COPY run.sh /run.sh
 COPY sync.py /app/sync.py
