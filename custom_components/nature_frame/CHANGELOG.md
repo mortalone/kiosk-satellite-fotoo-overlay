@@ -1,5 +1,17 @@
 # Nature Frame changelog
 
+## 0.7.2
+
+- Adds solid edge-color framing for screen-profile playlists.
+- Nature Frame now creates a screen-ratio canvas before handing an image to
+  Kiosk Satellite. Empty top/bottom or side areas are filled with solid median
+  colors sampled from the nearest image edge instead of black.
+- Keeps the full artwork intact: use Kiosk Satellite **Fill the screen = Off**.
+- Adds a per-profile screen aspect-ratio setting with 16:9, 16:10, 4:3 and 3:2
+  presets. Portrait mode automatically uses the inverted ratio.
+- Generated framed images are cached lazily under
+  `/media/nature-frame/framed/`; images are only processed when displayed.
+
 ## 0.7.1
 
 - Exposes each collection's representative thumbnail through the switch
