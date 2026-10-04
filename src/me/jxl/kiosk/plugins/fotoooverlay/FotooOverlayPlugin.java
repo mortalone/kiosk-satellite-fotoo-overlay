@@ -99,6 +99,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private int cameraHeightPercent = 55;
     private String cameraPosition = "Center";
     private boolean cameraTestMode = false;
+    private boolean showOnKioskScreensaver = true;
+    private boolean showOnFotoo = true;
+    private boolean kioskScreensaverActive = false;
+    private String kioskScreensaverView = "";
 
     private String haBaseUrl;
     private String mediaState;
@@ -147,7 +151,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private final Runnable liveStatePollTask = new Runnable() {
         @Override public void run() {
-            if (!fotooActive() || host == null) return;
+            if (!overlayActive() || host == null) return;
             if (directMusicAssistantAvailable()) {
                 pollMusicAssistantQueue();
                 if (maLastSuccessRealtime == 0 ||
@@ -191,7 +195,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private final Runnable cameraRefreshTask = new Runnable() {
         @Override public void run() {
-            if (doorbellView == null || !fotooActive()) return;
+            if (doorbellView == null || !overlayActive()) return;
             refreshDoorbellImage();
             main.postDelayed(this, 1000);
         }
@@ -221,10 +225,13 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         registerDreamReceiver();
         registerActivityLifecycle();
         main.post(this::cleanupStaleOverlayWindows);
+        host.subscribe("screensaver.state");
+        host.subscribe("screensaver.view");
         applySettings(settings);
         readKioskMusicAssistantConfig();
         readHomeAssistantBaseUrl();
-        host.status("Ready. Fotoo DreamService is automatic. Use Attach/show overlays now only when Fotoo is already on screen.", false);
+        readInitialScreensaverState();
+        host.status("Ready. Overlays follow Kiosk Satellite screensavers and Fotoo.", false);
     }
 
     @Override
@@ -260,6 +267,18 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     @Override
     public synchronized void onEvent(String event, Map<String, Object> payload) {
+        if ("ks.screensaver.state".equals(event)) {
+            kioskScreensaverActive = Boolean.TRUE.equals(payload.get("active"));
+            if (!kioskScreensaverActive) kioskScreensaverView = "";
+            main.post(this::updatePresentation);
+            return;
+        }
+        if ("ks.screensaver.view".equals(event)) {
+            Object value = payload.get("view");
+            kioskScreensaverView = value == null ? "" : String.valueOf(value);
+            main.post(this::updatePresentation);
+            return;
+        }
         if (!event.startsWith("ks.ha.entity.")) return;
         Object idValue = payload.get("entityId");
         String entityId = idValue == null ? event.substring("ks.ha.entity.".length()) : String.valueOf(idValue);
@@ -322,6 +341,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             io = null;
         }
         subscribedEntities.clear();
+        kioskScreensaverActive = false;
+        kioskScreensaverView = "";
         mediaPollPending = false;
         cameraStatePollPending = false;
         trigger1PollPending = false;
@@ -489,6 +510,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         String camPosition = stringSetting(values, "cameraPosition");
         cameraPosition = "Top".equals(camPosition) || "Bottom".equals(camPosition) ? camPosition : "Center";
         cameraTestMode = Boolean.TRUE.equals(values.get("cameraTestMode"));
+        showOnKioskScreensaver = values.get("showOnKioskScreensaver") == null
+                || Boolean.TRUE.equals(values.get("showOnKioskScreensaver"));
+        showOnFotoo = values.get("showOnFotoo") == null
+                || Boolean.TRUE.equals(values.get("showOnFotoo"));
 
         doorbellInitialSeen = false;
         lastDoorbellState = null;
@@ -523,9 +548,28 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         return dreaming || manualFotoo || forceOverlayPreview;
     }
 
+    private boolean kioskScreensaverActiveForOverlay() {
+        if (!showOnKioskScreensaver || !kioskScreensaverActive) return false;
+        return !"black".equals(kioskScreensaverView)
+                && !"blank".equals(kioskScreensaverView);
+    }
+
+    private boolean overlayActive() {
+        return (showOnFotoo && fotooActive()) || kioskScreensaverActiveForOverlay();
+    }
+
+    private void readInitialScreensaverState() {
+        if (host == null) return;
+        host.executeCommand("isScreensaverActive", Collections.emptyMap(), (ok, data, error) -> {
+            if (!ok || !(data instanceof Boolean)) return;
+            kioskScreensaverActive = (Boolean) data;
+            main.post(this::updatePresentation);
+        });
+    }
+
     private void updatePresentation() {
         main.removeCallbacks(liveStatePollTask);
-        if (!fotooActive()) {
+        if (!overlayActive()) {
             hideDoorbell();
             hideNowPlaying();
             return;
@@ -555,7 +599,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private void updateNowPlaying() {
-        if (!fotooActive() || nowPlayingEntity.isEmpty() || !mediaVisible()) {
+        if (!overlayActive() || nowPlayingEntity.isEmpty() || !mediaVisible()) {
             hideNowPlaying();
             return;
         }
@@ -972,7 +1016,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             lastDoorbellState2 = state;
         }
 
-        if (trigger && fotooActive()) main.post(() -> showDoorbell(false));
+        if (trigger && overlayActive()) main.post(() -> showDoorbell(false));
     }
 
     private void pollSimpleTextEntity(String entity, boolean playlist) {
@@ -1085,7 +1129,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private void showDoorbell(boolean testHold) {
-        if (!fotooActive() || context == null || windowManager == null) return;
+        if (!overlayActive() || context == null || windowManager == null) return;
         main.removeCallbacks(hideDoorbellTask);
         main.removeCallbacks(cameraRefreshTask);
         if (testHold) doorbellHeldByTest = true;
@@ -1097,7 +1141,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             frame.setAlpha(1f);
             if (cameraOpacity >= 100) {
                 frame.setClickable(true);
-                frame.setOnClickListener(v -> { /* consume touch; outside the window Fotoo still receives taps */ });
+                frame.setOnClickListener(v -> { /* consume touch inside camera; outside remains available to the screensaver */ });
             }
 
             doorbellImage = new ImageView(context);
@@ -1250,7 +1294,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
         test.setTag("fotoo-overlay:test");
-        test.setText("Fotoo Overlay 0.9.0 test");
+        test.setText("Screensaver Overlay 0.10.0 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
