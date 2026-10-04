@@ -3,10 +3,18 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay 0.11.0
+## Screensaver Overlay 0.11.2
 
-Overlay behavior is unchanged from 0.10.x. The repository release packages
-Nature Frame 0.8.0.
+Now Playing follows the explicitly selected Home Assistant media_player on both
+Kiosk Satellite's own screensavers and Fotoo. If Kiosk Satellite also has a
+Music Assistant / Sendspin player configured, MA only enriches metadata and no
+longer overrides the selected speaker's playback state.
+
+Now Playing can be positioned at **Top / Center / Bottom** and sized from
+**30–100%** of the screen width, which makes it possible to fit the card between
+Kiosk Satellite clock/weather/battery widgets.
+
+The repository continues to package Nature Frame 0.8.1.
 
 The overlay listens to Kiosk Satellite's official `screensaver.state` and
 `screensaver.view` plugin events, so it works above Kiosk Satellite's own
