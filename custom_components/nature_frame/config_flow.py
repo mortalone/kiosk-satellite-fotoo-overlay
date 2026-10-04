@@ -10,7 +10,7 @@ from .profile import PROFILE_ID, PROFILE_NAME
 
 
 class NatureFrameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 2
+    VERSION = 1
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
