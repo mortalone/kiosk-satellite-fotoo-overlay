@@ -22,9 +22,11 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.LruCache;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -74,6 +76,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private BroadcastReceiver dreamReceiver;
     private Application application;
     private Application.ActivityLifecycleCallbacks lifecycleCallbacks;
+    private Activity currentActivity;
     private boolean dreaming;
     private boolean manualFotoo;
     private boolean forceOverlayPreview;
@@ -139,9 +142,12 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private TextView mediaNext;
     private ProgressBar mediaProgress;
     private TextView mediaTime;
-    private String loadedMediaPicture;
-    private String renderedMediaPicture;
+    private String loadedMediaPicture = "";
+    private String renderedMediaPicture = "";
+    private String renderedMediaPictureKey = "";
+    private long mediaImageRequestSerial;
     private boolean mediaFetchPending;
+    private final LruCache<String, Bitmap> mediaImageCache = new LruCache<>(8);
 
     private View doorbellView;
     private ImageView doorbellImage;
@@ -173,6 +179,17 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             if (!forceOverlayPreview) return;
             forceOverlayPreview = false;
             updatePresentation();
+        }
+    };
+
+    private final Runnable clearMediaImageTask = new Runnable() {
+        @Override public void run() {
+            if (mediaImage == null) return;
+            String current = attr(mediaAttributes, "entity_picture", "");
+            if (!current.isEmpty()) return;
+            mediaImage.setImageDrawable(null);
+            renderedMediaPicture = "";
+            renderedMediaPictureKey = "";
         }
     };
 
