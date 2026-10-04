@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.9
+
+- Packages Nature Frame 0.7.5.
+- Private library thumbnails and image counts now refresh automatically after
+  files are added.
+- Fixes Zoo · Private remaining hidden by the Lovelace auto-entities selector
+  after images are uploaded.
+- Screensaver Overlay behavior is unchanged.
+
 ## 0.10.8
 
 - Packages Nature Frame 0.7.4.
