@@ -1,21 +1,16 @@
-## Screensaver Overlay 0.10.7
+## Screensaver Overlay 0.10.8
 
 Packaging release. Overlay behavior is unchanged.
 
-## Nature Frame 0.7.3
+## Nature Frame 0.7.4
 
-This release fixes missing public collection switches when Wikimedia Commons'
-API cannot be reached from Home Assistant during startup.
+Virtual collections such as **Kitchen · Mixed** and **Art · Misc · Curated**
+now get their own representative cover image in Lovelace instead of looking
+identical to one of their source collections.
 
-Nature Frame now includes small built-in fallback catalogues for:
+The active slideshow also deduplicates identical image URLs, so enabling both a
+virtual collection and one of its source collections no longer causes the same
+image to be queued twice.
 
-- Zoo · Public · Swainson
-- Kitchen · USDA Pomological Watercolors
-- Kitchen · Köhler Botanical Plates
-- Kitchen · Mrs Beeton Plates
-
-The full Wikimedia catalogue is still used whenever the API works. The fallback
-only guarantees that the collections and thumbnails exist and remain testable.
-
-Nature Frame 0.7.2 solid edge-color framing and 0.7.1 Lovelace thumbnails remain
-included.
+All previous per-screen profile, fallback catalogue, thumbnail and solid
+edge-color framing features remain included.
