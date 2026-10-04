@@ -1,24 +1,21 @@
-## Screensaver Overlay 0.10.4
+## Screensaver Overlay 0.10.5
 
-Packaging release. Overlay behavior is unchanged from 0.10.3.
+Packaging release. Overlay behavior is unchanged from 0.10.4.
 
-## Nature Frame 0.7.1
+## Nature Frame 0.7.2
 
-Collection switches now expose representative thumbnails directly as
-`entity_picture`. This enables a native Lovelace grid of Picture Entity cards
-where each collection has a miniature preview and tapping the picture toggles
-that collection on/off.
+This release adds the requested no-crop solid framing.
 
-Each collection switch also exposes:
+Nature Frame now prepares screen-profile images on a canvas matching the target
+screen ratio. The original artwork remains complete, while unused top/bottom or
+side areas are filled with **solid colors sampled from the nearest image edge**
+instead of black bars.
 
-- screen/profile
-- gallery key
-- image count
-- source
-- private/virtual flags
+Use Kiosk Satellite **Fill the screen = Off**.
 
-The public Zoo collection remains **Zoo · Public · Swainson**. Modern
-copyrighted Copenhagen Zoo artwork is intentionally not downloaded as a public
-collection; household copies can be kept in **Zoo · Private**.
+Each Nature Frame profile can use 16:9, 16:10, 4:3 or 3:2. Portrait playback
+automatically inverts the configured landscape ratio. Framed images are
+generated only when needed and cached under `/media/nature-frame/framed/`.
 
-Per-screen profiles from Nature Frame 0.7.0 remain supported.
+Nature Frame 0.7.1 thumbnail/entity-picture support and per-screen profiles
+remain included.
