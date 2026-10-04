@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.6
+
+- Packages the complete Nature Frame 0.7.2 implementation.
+- Includes per-screen profiles, Lovelace collection thumbnails and solid
+  edge-color no-crop framing.
+- Keeps Screensaver Overlay behavior unchanged from 0.10.4.
+
 ## 0.10.5
 
 - Packages Nature Frame 0.7.2.
