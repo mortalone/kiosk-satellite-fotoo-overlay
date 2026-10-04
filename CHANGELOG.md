@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.5
+
+- Packages Nature Frame 0.7.2.
+- Adds the requested solid edge-color framing: full artwork is preserved while
+  unused bars are filled with colors sampled from the nearest image edge.
+- Adds per-screen aspect ratio presets for 16:9, 16:10, 4:3 and 3:2.
+- Framed images are generated lazily and cached under
+  `/media/nature-frame/framed/`.
+- Screensaver Overlay behavior is unchanged from 0.10.4.
+
 ## 0.10.4
 
 - Packages Nature Frame 0.7.1.
