@@ -239,7 +239,11 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
         registerDreamReceiver();
         registerActivityLifecycle();
-        main.post(this::cleanupStaleOverlayWindows);
+        currentActivity = findResumedActivity();
+        main.post(() -> {
+            cleanupStaleInAppViews();
+            cleanupStaleOverlayWindows();
+        });
         host.subscribe("screensaver.state");
         host.subscribe("screensaver.view");
         applySettings(settings);
@@ -360,6 +364,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         // orphan TYPE_APPLICATION_OVERLAY windows visible even after disabling
         // plugins or updating. Cleanup is now performed synchronously on main.
         cleanupUiSynchronously();
+        currentActivity = null;
 
         if (io != null) {
             io.shutdownNow();
@@ -449,16 +454,24 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             @Override public void onActivityStarted(Activity activity) {}
             @Override public void onActivityResumed(Activity activity) {
                 if (!activity.getPackageName().equals(context.getPackageName())) return;
+                currentActivity = activity;
                 boolean changed = manualFotoo || forceOverlayPreview;
                 manualFotoo = false;
                 forceOverlayPreview = false;
                 main.removeCallbacks(forcePreviewTimeoutTask);
+                cleanupStaleInAppViews();
                 if (changed) updatePresentation();
             }
-            @Override public void onActivityPaused(Activity activity) {}
-            @Override public void onActivityStopped(Activity activity) {}
+            @Override public void onActivityPaused(Activity activity) {
+                if (currentActivity == activity) currentActivity = null;
+            }
+            @Override public void onActivityStopped(Activity activity) {
+                if (currentActivity == activity) currentActivity = null;
+            }
             @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
-            @Override public void onActivityDestroyed(Activity activity) {}
+            @Override public void onActivityDestroyed(Activity activity) {
+                if (currentActivity == activity) currentActivity = null;
+            }
         };
         application.registerActivityLifecycleCallbacks(lifecycleCallbacks);
     }
@@ -593,6 +606,105 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private boolean overlayActive() {
         return (showOnFotoo && fotooActive()) || kioskScreensaverActiveForOverlay();
+    }
+
+    /**
+     * KS's own Home Assistant Media screensaver can use Android hybrid
+     * composition. On some Raspberry Pi Android builds a TYPE_APPLICATION_OVERLAY
+     * surface is then composited below the WebView surface. When KS itself owns
+     * the foreground Activity, attach our view to its decor hierarchy instead.
+     * Fotoo remains an external app/DreamService and keeps using the system
+     * overlay path that has always worked there.
+     */
+    private boolean preferInAppOverlay() {
+        if (kioskScreensaverActiveForOverlay()) return true;
+        return forceOverlayPreview && activeKioskActivity() != null;
+    }
+
+    private Activity activeKioskActivity() {
+        Activity activity = currentActivity;
+        if (activity != null && !activity.isFinishing() &&
+                (Build.VERSION.SDK_INT < 17 || !activity.isDestroyed())) {
+            return activity;
+        }
+        activity = findResumedActivity();
+        if (activity != null) currentActivity = activity;
+        return activity;
+    }
+
+    private boolean addOverlayView(
+            View view,
+            int width,
+            int height,
+            int gravity,
+            int yOffset,
+            boolean camera) {
+        if (view == null) return false;
+
+        if (preferInAppOverlay()) {
+            Activity activity = activeKioskActivity();
+            if (activity != null) {
+                View content = activity.findViewById(android.R.id.content);
+                if (content instanceof FrameLayout) {
+                    FrameLayout root = (FrameLayout) content;
+                    FrameLayout.LayoutParams params =
+                            new FrameLayout.LayoutParams(width, height, gravity);
+                    if ((gravity & Gravity.TOP) == Gravity.TOP) {
+                        params.topMargin = yOffset;
+                    } else if ((gravity & Gravity.BOTTOM) == Gravity.BOTTOM) {
+                        params.bottomMargin = yOffset;
+                    }
+                    root.addView(view, params);
+                    if (Build.VERSION.SDK_INT >= 21) view.setZ(100000f);
+                    view.bringToFront();
+                    root.invalidate();
+                    return true;
+                }
+            }
+        }
+
+        if (windowManager == null) return false;
+        WindowManager.LayoutParams params = camera
+                ? cameraOverlayParams(width, height)
+                : overlayParams(width, height);
+        params.gravity = gravity;
+        params.y = yOffset;
+        windowManager.addView(view, params);
+        return true;
+    }
+
+    private void removeOverlayView(View view) {
+        if (view == null) return;
+        try {
+            ViewParent parent = view.getParent();
+            if (parent instanceof ViewGroup) {
+                ((ViewGroup) parent).removeView(view);
+                return;
+            }
+        } catch (Throwable ignored) {}
+        if (windowManager != null) {
+            try { windowManager.removeViewImmediate(view); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void cleanupStaleInAppViews() {
+        Activity activity = activeKioskActivity();
+        if (activity == null) return;
+        View content = activity.findViewById(android.R.id.content);
+        if (!(content instanceof ViewGroup)) return;
+        removeTaggedChildren((ViewGroup) content);
+    }
+
+    private void removeTaggedChildren(ViewGroup group) {
+        for (int i = group.getChildCount() - 1; i >= 0; i--) {
+            View child = group.getChildAt(i);
+            Object tag = child.getTag();
+            if (tag instanceof String && ((String) tag).startsWith("fotoo-overlay:")) {
+                group.removeViewAt(i);
+                continue;
+            }
+            if (child instanceof ViewGroup) removeTaggedChildren((ViewGroup) child);
+        }
     }
 
     private void readInitialScreensaverState() {
