@@ -1,54 +1,14 @@
 # Nature Frame Sync
 
-## Formål
-
-Nature Frame Sync lægger naturillustrationer i Home Assistant Media. Det gør det muligt at bruge Kiosk Satellites indbyggede Home Assistant Media-pauseskærm uden Fotoo.
-
-## Første synkronisering
-
-Inky Bird Frame har mange højopløselige PNG-filer. En enkelt retning fylder omkring et halvt GB, så første synkronisering kan tage nogle minutter. Senere kørsler sammenligner GitHub blob-SHA'er og downloader kun nye eller ændrede filer.
+## Lager
+Originale Inky Bird Frame portrait-PNG'er fylder ca. 526 MB. Version 0.2.0 optimerer som standard til JPEG og beholder ikke de hentede PNG-filer permanent.
 
 ## Skærmretning
+- portrait → upstream portrait.png
+- landscape → upstream display.png
+- both → begge
 
-- **portrait**: bruger upstream `portrait.png` (1200×1600)
-- **landscape**: bruger upstream `display.png` (1600×1200)
-- **both**: henter begge
+## Lovelace
+Companion-integrationen opretter `select.nature_frame_gallery`. Kiosk Satellite peger permanent på `nature-frame/active/portrait` på den lodrette skærm.
 
-På den lodrette vægskærm vælges `portrait`.
-
-## Placering i Home Assistant
-
-Kildesamlinger lander i:
-
-```text
-/media/nature-frame/
-  birds/
-    portrait/
-    landscape/
-```
-
-Companion-integrationen **Nature Frame** kan derefter styre det aktive galleri fra Lovelace og bygger:
-
-```text
-/media/nature-frame/active/
-  portrait/
-  landscape/
-```
-
-Kiosk Satellite skal pege på `nature-frame/active/portrait` på en lodret skærm.
-
-## Lovelace-styring
-
-Installer companion-integrationen fra samme repository via HACS. Den opretter:
-
-`select.nature_frame_gallery`
-
-Det er denne entity, der bruges som dropdown/tile på Lovelace. Et galleri-skift ændrer active-mappen uden at kopiere hele billedsamlingen.
-
-## Opdateringer og fejl
-
-Add-on'en checker upstream efter det valgte antal timer. Uændrede billeder røres ikke. Hvis GitHub eller netværket er utilgængeligt, beholdes eksisterende billeder, og synkroniseringen prøves igen ved næste interval.
-
-## Kilde og licens
-
-Fuglebillederne hentes direkte fra `veteranbv/inky-bird-frame` og pakkes ikke ind i denne add-on. Kildematerialet er underlagt upstream-projektets egne licens- og provenancevilkår.
+Fremtidige gallerier som night-sky, mammals og nature bliver separate collections og kan aktiveres individuelt.
