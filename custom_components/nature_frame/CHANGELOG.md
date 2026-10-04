@@ -1,5 +1,20 @@
 # Nature Frame changelog
 
+## 0.7.0
+
+- Adds one independent collection profile per tablet/screen.
+- Existing installations migrate implicitly to a backwards-compatible Default
+  profile without changing the config-entry version.
+- Additional Nature Frame entries can be named after the target screen, such as
+  Kitchen tablet, Living room or 1st floor.
+- Every profile gets its own Home Assistant device and collection switches.
+- Adds **Nature Frame -> Screens / profiles** to the Media Browser.
+- Adds stable per-profile media paths:
+  `media-source://nature_frame/profile/<profile>/portrait` and
+  `.../landscape`.
+- Keeps legacy `active/portrait` and `active/landscape` paths working for
+  the first/Default profile.
+
 ## 0.6.0
 
 - Replaces the broad Zoo-art source with **Zoo · Public · Swainson**, balanced
