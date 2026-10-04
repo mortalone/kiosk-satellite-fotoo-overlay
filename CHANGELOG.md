@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.1
+
+- Extends the existing Now Playing and doorbell camera overlays to Kiosk
+  Satellite's own screensavers using the official plugin events
+  `screensaver.state` and `screensaver.view`.
+- Adds independent **Show on Kiosk Satellite screensavers** and **Show on
+  Fotoo** settings.
+- Keeps black/blank Kiosk Satellite screensavers free of overlay windows.
+- Reads the current screensaver state when the plugin starts, so an already
+  active screensaver does not need to be restarted.
+- Fotoo support remains available; the plugin is no longer Fotoo-dependent.
+- Nature Frame remains at 0.6.0 in this repository release.
+
 ## 0.9.0
 
 Packaging release containing **Nature Frame 0.6.0**.
