@@ -4,15 +4,16 @@ Packaging release. Overlay behavior is unchanged.
 
 ## Nature Frame 0.7.6
 
-This fixes PhotoRoom/background-remover PNG files appearing much smaller than
-the screen.
+Private posters exported from PhotoRoom/upscalers can contain a large invisible
+or white square canvas around the actual artwork. Upscaling that file does not
+make the poster larger on screen because the empty canvas is scaled too.
 
-Those tools often make the outer background transparent without reducing the
-actual canvas size. Nature Frame previously scaled the entire transparent
-canvas, so the poster itself could occupy only the middle of the display.
+Nature Frame now removes that outer canvas automatically before framing:
 
-Nature Frame now trims only transparent outer padding first, then scales the
-visible artwork as large as possible while preserving the full poster.
+- transparent padding is trimmed;
+- large near-uniform opaque margins are also detected and trimmed;
+- the remaining poster is scaled to fill the target screen on one axis while
+  preserving the full poster and its aspect ratio;
+- old framed renders are bypassed by a new cache generation.
 
-The framing cache version is also bumped, so old framed copies are regenerated
-automatically after the update.
+Keep Kiosk Satellite **Fill the screen = Off**.
