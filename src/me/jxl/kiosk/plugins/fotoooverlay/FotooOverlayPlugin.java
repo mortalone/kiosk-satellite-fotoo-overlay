@@ -88,6 +88,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private boolean showPaused = true;
     private String nowPlayingPosition = "Bottom";
     private int nowPlayingOffset = 34;
+    private int nowPlayingWidthPercent = 90;
     private int nowPlayingOpacity = 90;
     private boolean showProgress = true;
     private String timeLabels = "Elapsed / remaining";
@@ -152,15 +153,13 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private final Runnable liveStatePollTask = new Runnable() {
         @Override public void run() {
             if (!overlayActive() || host == null) return;
-            if (directMusicAssistantAvailable()) {
-                pollMusicAssistantQueue();
-                if (maLastSuccessRealtime == 0 ||
-                        SystemClock.elapsedRealtime() - maLastSuccessRealtime > 4000) {
-                    pollMediaEntity();
-                }
-            } else {
-                pollMediaEntity();
-            }
+            // The explicitly selected Home Assistant media_player is the
+            // authoritative playback state. Direct Music Assistant data may
+            // enrich title/artwork/queue metadata, but must never replace the
+            // selected speaker's playing/paused state with the kiosk's own MA
+            // player state.
+            pollMediaEntity();
+            if (directMusicAssistantAvailable()) pollMusicAssistantQueue();
             if (doorbellView != null || cameraTestMode) pollCameraEntity();
             pollDoorbellTrigger(1);
             pollDoorbellTrigger(2);
@@ -299,10 +298,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         Object attrsValue = payload.get("attributes");
         Map<?, ?> attrs = attrsValue instanceof Map ? (Map<?, ?>) attrsValue : Collections.emptyMap();
 
-        if (entityId.equals(nowPlayingEntity) &&
-                (!directMusicAssistantAvailable() ||
-                 maLastSuccessRealtime == 0 ||
-                 SystemClock.elapsedRealtime() - maLastSuccessRealtime > 4000)) {
+        if (entityId.equals(nowPlayingEntity)) {
             applyMediaSnapshot(state, attrs);
         }
 
@@ -502,9 +498,15 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         doorbellEntity2 = nextDoorbell2;
         doorbellCameraEntity = nextCamera;
         showPaused = Boolean.TRUE.equals(values.get("showPaused"));
-        nowPlayingPosition = "Top".equals(values.get("nowPlayingPosition")) ? "Top" : "Bottom";
+        String npPosition = stringSetting(values, "nowPlayingPosition");
+        nowPlayingPosition = "Top".equals(npPosition) || "Center".equals(npPosition)
+                ? npPosition : "Bottom";
         Object offset = values.get("nowPlayingOffset");
         nowPlayingOffset = offset instanceof Number ? Math.max(0, Math.min(500, ((Number) offset).intValue())) : 34;
+        Object npWidth = values.get("nowPlayingWidthPercent");
+        nowPlayingWidthPercent = npWidth instanceof Number
+                ? Math.max(30, Math.min(100, ((Number) npWidth).intValue()))
+                : 90;
         Object npOpacity = values.get("nowPlayingOpacity");
         nowPlayingOpacity = npOpacity instanceof Number ? Math.max(10, Math.min(100, ((Number) npOpacity).intValue())) : 90;
         showProgress = values.get("showProgress") == null || Boolean.TRUE.equals(values.get("showProgress"));
@@ -549,7 +551,9 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             // opacity, size, position and test-mode changes are guaranteed
             // to apply to the actual WindowManager window.
             if (doorbellView != null) hideDoorbell();
-            if (nowPlayingView != null) nowPlayingView.setAlpha(nowPlayingOpacity / 100f);
+            // Width/position are WindowManager layout parameters, so rebuild
+            // the Now Playing window whenever settings are saved.
+            if (nowPlayingView != null) hideNowPlaying();
             updatePresentation();
         });
     }
@@ -605,15 +609,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             showDoorbell(true);
             pollCameraEntity();
         }
-        if (directMusicAssistantAvailable()) {
-            pollMusicAssistantQueue();
-            if (maLastSuccessRealtime == 0 ||
-                    SystemClock.elapsedRealtime() - maLastSuccessRealtime > 4000) {
-                pollMediaEntity();
-            }
-        } else {
-            pollMediaEntity();
-        }
+        pollMediaEntity();
+        if (directMusicAssistantAvailable()) pollMusicAssistantQueue();
         updateNowPlaying();
     }
 
@@ -900,7 +897,19 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         String nextTitle = musicAssistantItemTitle(nextItem);
         if (!nextTitle.isEmpty()) nextTrackState = nextTitle;
 
-        applyMediaSnapshot(state, attrs);
+        // Music Assistant is metadata enrichment only. The configured HA
+        // media_player remains authoritative for playing/paused/idle state.
+        // This is important when the kiosk's own Sendspin/MA player is not the
+        // same speaker selected in the plugin.
+        if (mediaState == null || mediaState.trim().isEmpty()) return;
+        Map<String, Object> merged = new HashMap<>();
+        for (Map.Entry<?, ?> entry : mediaAttributes.entrySet()) {
+            if (entry.getKey() instanceof String) {
+                merged.put((String) entry.getKey(), entry.getValue());
+            }
+        }
+        merged.putAll(attrs);
+        applyMediaSnapshot(mediaState, merged);
     }
 
     private static String musicAssistantItemTitle(JSONObject item) {
@@ -1104,10 +1113,21 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
         card.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        int width = Math.min(dp(700), Math.max(dp(300), context.getResources().getDisplayMetrics().widthPixels - dp(32)));
+        int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
+        int availableWidth = Math.max(dp(260), screenWidth - dp(24));
+        int requestedWidth = screenWidth * nowPlayingWidthPercent / 100;
+        int width = Math.min(availableWidth, Math.max(dp(260), requestedWidth));
         WindowManager.LayoutParams params = overlayParams(width, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.gravity = ("Top".equals(nowPlayingPosition) ? Gravity.TOP : Gravity.BOTTOM) | Gravity.CENTER_HORIZONTAL;
-        params.y = dp(nowPlayingOffset);
+        if ("Top".equals(nowPlayingPosition)) {
+            params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            params.y = dp(nowPlayingOffset);
+        } else if ("Center".equals(nowPlayingPosition)) {
+            params.gravity = Gravity.CENTER;
+            params.y = 0;
+        } else {
+            params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            params.y = dp(nowPlayingOffset);
+        }
 
         try {
             windowManager.addView(card, params);
@@ -1313,7 +1333,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
         test.setTag("fotoo-overlay:test");
-        test.setText("Screensaver Overlay 0.11.1 test");
+        test.setText("Screensaver Overlay 0.11.2 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
