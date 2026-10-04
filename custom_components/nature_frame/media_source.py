@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant
 
 from .catalog import NatureFrameCatalog
 from .const import DOMAIN
+from .selection import selected_gallery_keys
 
 
 def _catalog(hass: HomeAssistant) -> NatureFrameCatalog:
@@ -23,10 +24,14 @@ def _catalog(hass: HomeAssistant) -> NatureFrameCatalog:
     return next(iter(entries.values()))
 
 
-def _selected_gallery(hass: HomeAssistant, catalog: NatureFrameCatalog) -> str:
+def _selected_galleries(
+    hass: HomeAssistant,
+    catalog: NatureFrameCatalog,
+) -> list[str]:
     entries = hass.config_entries.async_entries(DOMAIN)
-    selected = entries[0].options.get("gallery") if entries else None
-    return selected if selected in catalog.galleries else catalog.gallery_keys()[0]
+    if not entries:
+        return catalog.gallery_keys()[:1]
+    return selected_gallery_keys(entries[0], catalog.gallery_keys())
 
 
 async def async_get_media_source(hass: HomeAssistant) -> "NatureFrameMediaSource":
@@ -46,7 +51,9 @@ class NatureFrameMediaSource(MediaSource):
         await catalog.async_refresh()
         parts = [part for part in item.identifier.split("/") if part]
         if len(parts) != 4 or parts[0] != "item":
-            raise Unresolvable(f"Could not resolve Nature Frame item: {item.identifier}")
+            raise Unresolvable(
+                f"Could not resolve Nature Frame item: {item.identifier}"
+            )
         _, gallery_key, orientation, image_key = parts
         for image in catalog.images(gallery_key, orientation):
             if image.key == image_key:
@@ -58,10 +65,37 @@ class NatureFrameMediaSource(MediaSource):
         catalog = _catalog(self.hass)
         await catalog.async_refresh()
         identifier = item.identifier or ""
+        selected = _selected_galleries(self.hass, catalog)
+        selected_galleries = [
+            gallery
+            for key in selected
+            if (gallery := catalog.gallery(key)) is not None
+        ]
+        active_thumb = next(
+            (
+                gallery.thumbnail
+                for gallery in selected_galleries
+                if gallery.thumbnail is not None
+            ),
+            None,
+        )
 
         if not identifier:
-            selected = _selected_gallery(self.hass, catalog)
-            gallery = catalog.gallery(selected)
+            children = [
+                self._folder(
+                    "active/portrait",
+                    f"Active collections ({len(selected)}) · Portrait",
+                    active_thumb,
+                ),
+                self._folder(
+                    "active/landscape",
+                    f"Active collections ({len(selected)}) · Landscape",
+                    active_thumb,
+                ),
+                self._folder("galleries", "All collections"),
+            ]
+            if any(gallery.is_private for gallery in catalog.galleries.values()):
+                children.append(self._folder("private", "Private collections"))
             return BrowseMediaSource(
                 domain=DOMAIN,
                 identifier=None,
@@ -71,44 +105,42 @@ class NatureFrameMediaSource(MediaSource):
                 can_play=False,
                 can_expand=True,
                 children_media_class=MediaClass.DIRECTORY,
-                thumbnail=gallery.thumbnail if gallery else None,
-                children=[
-                    self._folder(
-                        "active/portrait",
-                        "Active gallery · Portrait",
-                        gallery.thumbnail if gallery else None,
-                    ),
-                    self._folder(
-                        "active/landscape",
-                        "Active gallery · Landscape",
-                        gallery.thumbnail if gallery else None,
-                    ),
-                    self._folder("galleries", "All galleries"),
-                ],
+                thumbnail=active_thumb,
+                children=children,
             )
 
-        if identifier == "galleries":
+        if identifier in {"galleries", "private"}:
+            private_only = identifier == "private"
             children = []
             for key in catalog.gallery_keys():
                 gallery = catalog.gallery(key)
-                if gallery:
-                    children.append(
-                        self._folder(
-                            f"gallery/{key}", gallery.title, gallery.thumbnail
-                        )
+                if not gallery or (private_only and not gallery.is_private):
+                    continue
+                children.append(
+                    self._folder(
+                        f"gallery/{key}",
+                        gallery.title,
+                        gallery.thumbnail,
                     )
-            return self._directory(identifier, "All galleries", children)
+                )
+            return self._directory(
+                identifier,
+                "Private collections" if private_only else "All collections",
+                children,
+            )
 
         if identifier.startswith("gallery/") and identifier.count("/") == 1:
             key = identifier.split("/", 1)[1]
             gallery = catalog.gallery(key)
             if not gallery:
-                raise BrowseError("Unknown Nature Frame gallery")
+                raise BrowseError("Unknown Nature Frame collection")
             portrait_thumb = (
                 gallery.portrait[0].thumbnail if gallery.portrait else gallery.thumbnail
             )
             landscape_thumb = (
-                gallery.landscape[0].thumbnail if gallery.landscape else gallery.thumbnail
+                gallery.landscape[0].thumbnail
+                if gallery.landscape
+                else gallery.thumbnail
             )
             return self._directory(
                 identifier,
@@ -126,13 +158,11 @@ class NatureFrameMediaSource(MediaSource):
 
         if identifier in {"active/portrait", "active/landscape"}:
             orientation = identifier.split("/", 1)[1]
-            key = _selected_gallery(self.hass, catalog)
-            gallery = catalog.gallery(key)
             return self._directory(
                 identifier,
-                f"{gallery.title if gallery else key} · {orientation.title()}",
-                self._image_children(catalog, key, orientation),
-                gallery.thumbnail if gallery else None,
+                f"Active collections ({len(selected)}) · {orientation.title()}",
+                self._active_image_children(catalog, selected, orientation),
+                active_thumb,
             )
 
         parts = identifier.split("/")
@@ -142,7 +172,7 @@ class NatureFrameMediaSource(MediaSource):
                 raise BrowseError("Unknown orientation")
             gallery = catalog.gallery(key)
             if not gallery:
-                raise BrowseError("Unknown Nature Frame gallery")
+                raise BrowseError("Unknown Nature Frame collection")
             return self._directory(
                 identifier,
                 f"{gallery.title} · {orientation.title()}",
@@ -192,17 +222,40 @@ class NatureFrameMediaSource(MediaSource):
         catalog: NatureFrameCatalog,
         gallery_key: str,
         orientation: str,
+        *,
+        prefix_title: bool = False,
     ) -> list[BrowseMediaSource]:
+        gallery = catalog.gallery(gallery_key)
+        title_prefix = f"{gallery.title} · " if prefix_title and gallery else ""
         return [
             BrowseMediaSource(
                 domain=DOMAIN,
                 identifier=f"item/{gallery_key}/{orientation}/{image.key}",
                 media_class=MediaClass.IMAGE,
                 media_content_type=image.mime_type,
-                title=image.title,
+                title=f"{title_prefix}{image.title}",
                 can_play=True,
                 can_expand=False,
                 thumbnail=image.thumbnail or image.url,
             )
             for image in catalog.images(gallery_key, orientation)
         ]
+
+    def _active_image_children(
+        self,
+        catalog: NatureFrameCatalog,
+        gallery_keys: list[str],
+        orientation: str,
+    ) -> list[BrowseMediaSource]:
+        prefix_title = len(gallery_keys) > 1
+        children: list[BrowseMediaSource] = []
+        for key in gallery_keys:
+            children.extend(
+                self._image_children(
+                    catalog,
+                    key,
+                    orientation,
+                    prefix_title=prefix_title,
+                )
+            )
+        return children
