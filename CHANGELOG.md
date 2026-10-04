@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.3
+
+- Replaces separate Doorbell **Camera width** and **Camera height** settings
+  with one **Camera size** setting.
+- Camera size controls width from 30–100% of the screen; height now follows the
+  actual camera frame aspect ratio automatically.
+- Doorbell images use FIT_CENTER inside the aspect-matched overlay, avoiding
+  unnecessary cropping from an arbitrary width/height box.
+- Frees one plugin setting slot for future controls.
+
 ## 0.11.2
 
 - Fixes Now Playing failing to appear for the explicitly selected Home Assistant
