@@ -93,6 +93,17 @@ def _decode_rgb(data: bytes) -> Image.Image:
         image.mode == "P" and "transparency" in image.info
     ):
         rgba = image.convert("RGBA")
+
+        # Background-removal tools commonly keep the original canvas size and
+        # merely make the surrounding area transparent. If we scale that whole
+        # canvas, the poster itself becomes tiny on the screensaver. Trim only
+        # transparent outer padding before fitting the artwork to the screen.
+        alpha = rgba.getchannel("A")
+        visible = alpha.point(lambda value: 255 if value >= 16 else 0)
+        bbox = visible.getbbox()
+        if bbox:
+            rgba = rgba.crop(bbox)
+
         base = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
         base.alpha_composite(rgba)
         return base.convert("RGB")
@@ -152,7 +163,7 @@ async def _async_image_bytes(hass: HomeAssistant, image: NatureImage) -> bytes:
         return await hass.async_add_executor_job(path.read_bytes)
 
     session = async_get_clientsession(hass)
-    headers = {"User-Agent": "HomeAssistant-NatureFrame/0.7.2"}
+    headers = {"User-Agent": "HomeAssistant-NatureFrame/0.7.6"}
     async with session.get(url, headers=headers, timeout=30) as response:
         response.raise_for_status()
         return await response.read()
@@ -167,7 +178,7 @@ async def async_solid_framed_url(
     ratio_label = entry_screen_ratio(entry)
     target_ratio = _parse_ratio(ratio_label, orientation)
     cache_key = hashlib.sha1(
-        f"{image.url}|{ratio_label}|{orientation}|solid-v1".encode("utf-8")
+        f"{image.url}|{ratio_label}|{orientation}|solid-v2".encode("utf-8")
     ).hexdigest()
     destination = CACHE_ROOT / f"{cache_key}.jpg"
 
