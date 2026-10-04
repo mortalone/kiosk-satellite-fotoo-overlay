@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import unquote
 
-from PIL import Image, ImageOps, ImageStat
+from PIL import Image, ImageChops, ImageOps, ImageStat
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -85,6 +85,75 @@ def _edge_colors(image: Image.Image) -> dict[str, tuple[int, int, int]]:
     }
 
 
+def _corner_background_color(image: Image.Image) -> tuple[int, int, int] | None:
+    """Return a likely outer-canvas color when all four corners agree."""
+    width, height = image.size
+    sample_w = max(1, round(width * 0.03))
+    sample_h = max(1, round(height * 0.03))
+    boxes = (
+        (0, 0, sample_w, sample_h),
+        (max(0, width - sample_w), 0, width, sample_h),
+        (0, max(0, height - sample_h), sample_w, height),
+        (
+            max(0, width - sample_w),
+            max(0, height - sample_h),
+            width,
+            height,
+        ),
+    )
+    colors = [_median_color(image, box) for box in boxes]
+
+    # Only treat the outside as a removable canvas when the corners are
+    # essentially the same color. This avoids cropping normal photographs.
+    for channel in range(3):
+        values = [color[channel] for color in colors]
+        if max(values) - min(values) > 18:
+            return None
+
+    return tuple(
+        round(sum(color[channel] for color in colors) / len(colors))
+        for channel in range(3)
+    )
+
+
+def _trim_uniform_outer_canvas(image: Image.Image) -> Image.Image:
+    """Trim large, nearly uniform outer margins while preserving the artwork."""
+    if image.width < 16 or image.height < 16:
+        return image
+
+    background_color = _corner_background_color(image)
+    if background_color is None:
+        return image
+
+    background = Image.new("RGB", image.size, background_color)
+    difference = ImageChops.difference(image, background)
+    red, green, blue = difference.split()
+    max_difference = ImageChops.lighter(red, ImageChops.lighter(green, blue))
+    foreground = max_difference.point(lambda value: 255 if value >= 20 else 0)
+    bbox = foreground.getbbox()
+    if not bbox:
+        return image
+
+    left, top, right, bottom = bbox
+    original_area = image.width * image.height
+    cropped_area = max(1, right - left) * max(1, bottom - top)
+
+    # Do not react to tiny edge/color variations. This is intended for files
+    # where a poster sits inside a significantly larger white/transparent
+    # export canvas (common with background-removal/upscaling tools).
+    if cropped_area > original_area * 0.92:
+        return image
+
+    pad_x = max(2, round((right - left) * 0.01))
+    pad_y = max(2, round((bottom - top) * 0.01))
+    left = max(0, left - pad_x)
+    top = max(0, top - pad_y)
+    right = min(image.width, right + pad_x)
+    bottom = min(image.height, bottom + pad_y)
+
+    return image.crop((left, top, right, bottom))
+
+
 def _decode_rgb(data: bytes) -> Image.Image:
     image = Image.open(BytesIO(data))
     image = ImageOps.exif_transpose(image)
@@ -95,9 +164,7 @@ def _decode_rgb(data: bytes) -> Image.Image:
         rgba = image.convert("RGBA")
 
         # Background-removal tools commonly keep the original canvas size and
-        # merely make the surrounding area transparent. If we scale that whole
-        # canvas, the poster itself becomes tiny on the screensaver. Trim only
-        # transparent outer padding before fitting the artwork to the screen.
+        # merely make the surrounding area transparent. Remove that first.
         alpha = rgba.getchannel("A")
         visible = alpha.point(lambda value: 255 if value >= 16 else 0)
         bbox = visible.getbbox()
@@ -106,9 +173,12 @@ def _decode_rgb(data: bytes) -> Image.Image:
 
         base = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
         base.alpha_composite(rgba)
-        return base.convert("RGB")
+        rgb = base.convert("RGB")
+        return _trim_uniform_outer_canvas(rgb)
 
-    return image.convert("RGB")
+    # Upscalers/background tools also sometimes bake the empty canvas in as
+    # opaque white (or another uniform color). Trim that outer canvas too.
+    return _trim_uniform_outer_canvas(image.convert("RGB"))
 
 
 def _render_solid_frame(
@@ -178,7 +248,7 @@ async def async_solid_framed_url(
     ratio_label = entry_screen_ratio(entry)
     target_ratio = _parse_ratio(ratio_label, orientation)
     cache_key = hashlib.sha1(
-        f"{image.url}|{ratio_label}|{orientation}|solid-v2".encode("utf-8")
+        f"{image.url}|{ratio_label}|{orientation}|solid-v3".encode("utf-8")
     ).hexdigest()
     destination = CACHE_ROOT / f"{cache_key}.jpg"
 
