@@ -2,24 +2,23 @@
 
 Native Android system overlays above Fotoo while Fotoo runs as the Android screensaver.
 
-## 0.8.4
+## 0.8.5
 
-- Now Playing uses Kiosk Satellite's existing Music Assistant configuration directly when the selected KS player source is Music Assistant.
-- The plugin polls Music Assistant's active queue directly, so automatic next-track transitions do not depend on the Home Assistant media_player updating correctly.
-- Manual track changes and automatic queue advances are both reflected in the overlay.
-- Progress uses Music Assistant queue elapsed time plus a local monotonic clock.
-- Next-track title is read from Music Assistant's queue when available.
-- Doorbell camera and Now Playing can remain visible simultaneously.
-- Two independent doorbell triggers can show the same camera.
-- Camera 100% uses a genuinely opaque Android window plus an RGB-only bitmap, so Fotoo cannot blend through the camera rectangle.
-- Camera width, height and vertical position are adjustable.
-- Camera width default is 90%, aligned to Kiosk Satellite's 5% numeric step validation.
-- Removed the empty Testing display group; Kiosk Satellite only accepts display groups that correspond to an actual setting group.
-- DreamService stop now hard-clears inferred/preview/manual overlay state, so overlays are removed as soon as Fotoo/screensaver closes and cannot remain over the Kiosk Satellite dashboard.
-- Separate opacity controls for Now Playing and the camera.
-- Persistent camera test mode remains available. **Attach / show overlays now** is now a plugin action instead of a setting, keeping the manifest within Kiosk Satellite's 20-setting SDK limit.
+This release is primarily a lifecycle/stability fix.
 
-Recommended door triggers for this installation:
+- **Critical fix:** Android system overlay windows are now removed on the Android main thread. Older builds tried to remove them from the plugin worker thread; Android could reject that removal and leave an orphan camera window visible even after disabling the plugin.
+- Saving camera settings immediately recreates the camera window on the main thread, so turning Camera test mode off really removes the test camera.
+- Automatic Fotoo process inference has been removed. Normal operation now uses the exact Android DreamService start/stop events; **Attach / show overlays now** is the explicit fallback if the plugin was installed while Fotoo was already running.
+- Attach/test fallback automatically expires after two minutes and is also cleared when Fotoo stops or Kiosk Satellite resumes.
+- Startup performs best-effort cleanup of stale Fotoo doorbell overlay windows left by older plugin sessions.
+- Music Assistant HTTP polling now parses the actual `/api` JSON-RPC response shape (the queue object is returned directly), fixing Now Playing disappearing after 0.8.0.
+- If direct Music Assistant polling fails, the selected Home Assistant media_player is used as a fallback instead of leaving Now Playing blank.
+- Camera and Music Assistant I/O run concurrently so a slow camera snapshot cannot block track updates.
+- Camera 100% remains an opaque Android window with an RGB-only bitmap.
+- Camera width, height and position remain adjustable.
+- Two door triggers and simultaneous camera + Now Playing remain supported.
+
+Recommended door triggers:
 
 - Trigger 1: `binary_sensor.doorbellcamera_person_occupancy`
 - Trigger 2: `binary_sensor.reolink_video_doorbell_wifi_visitor`
@@ -29,5 +28,3 @@ Recommended door triggers for this installation:
 Use Kiosk Satellite **Plugin Manager -> Add plugin** and paste:
 
 `https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
-
-Kiosk Satellite discovers the latest stable GitHub release and verifies the release assets.

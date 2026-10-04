@@ -45,6 +45,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 
 import org.json.JSONArray;
@@ -74,7 +76,6 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private Application.ActivityLifecycleCallbacks lifecycleCallbacks;
     private boolean dreaming;
     private boolean manualFotoo;
-    private boolean inferredFotoo;
     private boolean forceOverlayPreview;
 
     private final Set<String> subscribedEntities = new HashSet<>();
@@ -116,6 +117,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private String maToken = "";
     private String maPlayerId = "";
     private boolean maQueuePollPending;
+    private long maLastSuccessRealtime;
     private String playlistState = "";
     private String nextTrackState = "";
     private Map<?, ?> cameraAttributes = Collections.emptyMap();
@@ -140,12 +142,17 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private ImageView doorbellImage;
     private TextView doorbellLabel;
     private boolean cameraFetchPending;
+    private boolean doorbellHeldByTest;
 
     private final Runnable liveStatePollTask = new Runnable() {
         @Override public void run() {
             if (!fotooActive() || host == null) return;
             if (directMusicAssistantAvailable()) {
                 pollMusicAssistantQueue();
+                if (maLastSuccessRealtime == 0 ||
+                        SystemClock.elapsedRealtime() - maLastSuccessRealtime > 4000) {
+                    pollMediaEntity();
+                }
             } else {
                 pollMediaEntity();
             }
@@ -155,6 +162,14 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             if (showPlaylist && !playlistEntity.isEmpty()) pollSimpleTextEntity(playlistEntity, true);
             if (showNextTrack && !nextTrackEntity.isEmpty()) pollSimpleTextEntity(nextTrackEntity, false);
             main.postDelayed(this, 1000);
+        }
+    };
+
+    private final Runnable forcePreviewTimeoutTask = new Runnable() {
+        @Override public void run() {
+            if (!forceOverlayPreview) return;
+            forceOverlayPreview = false;
+            updatePresentation();
         }
     };
 
@@ -196,19 +211,19 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             return;
         }
 
-        io = Executors.newSingleThreadExecutor(task -> {
-            Thread thread = new Thread(task, "fotoo-overlay-images");
+        io = Executors.newFixedThreadPool(3, task -> {
+            Thread thread = new Thread(task, "fotoo-overlay-io");
             thread.setDaemon(true);
             return thread;
         });
 
         registerDreamReceiver();
         registerActivityLifecycle();
+        main.post(this::cleanupStaleOverlayWindows);
         applySettings(settings);
         readKioskMusicAssistantConfig();
         readHomeAssistantBaseUrl();
-        main.postDelayed(this::detectAlreadyRunningFotoo, 800);
-        host.status("Ready. Fotoo DreamService is automatic. Use the 'Open Fotoo with overlay' action for manual app mode.", false);
+        host.status("Ready. Fotoo DreamService is automatic. Use Attach/show overlays now only when Fotoo is already on screen.", false);
     }
 
     @Override
@@ -223,14 +238,16 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             openFotoo();
         } else if ("attachNow".equals(command)) {
             forceOverlayPreview = true;
+            main.removeCallbacks(forcePreviewTimeoutTask);
+            main.postDelayed(forcePreviewTimeoutTask, 120000);
             main.post(this::updatePresentation);
         } else if ("test".equals(command)) {
-            showTestOverlay();
+            main.post(this::showTestOverlay);
         } else if ("hide".equals(command)) {
             main.post(() -> {
-                inferredFotoo = false;
                 forceOverlayPreview = false;
                 manualFotoo = false;
+                main.removeCallbacks(forcePreviewTimeoutTask);
                 main.removeCallbacks(liveStatePollTask);
                 hideDoorbell();
                 hideNowPlaying();
@@ -249,7 +266,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         Object attrsValue = payload.get("attributes");
         Map<?, ?> attrs = attrsValue instanceof Map ? (Map<?, ?>) attrsValue : Collections.emptyMap();
 
-        if (entityId.equals(nowPlayingEntity) && !directMusicAssistantAvailable()) {
+        if (entityId.equals(nowPlayingEntity) &&
+                (!directMusicAssistantAvailable() ||
+                 maLastSuccessRealtime == 0 ||
+                 SystemClock.elapsedRealtime() - maLastSuccessRealtime > 4000)) {
             applyMediaSnapshot(state, attrs);
         }
 
@@ -288,9 +308,14 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         }
         lifecycleCallbacks = null;
         application = null;
-        main.removeCallbacksAndMessages(null);
-        hideDoorbellImmediate();
-        hideNowPlayingImmediate();
+
+        // PluginBridge calls stop() on the plugin worker thread. WindowManager
+        // views were previously removed from that worker thread, Android
+        // rejected the removal, and the exception was swallowed. That left
+        // orphan TYPE_APPLICATION_OVERLAY windows visible even after disabling
+        // plugins or updating. Cleanup is now performed synchronously on main.
+        cleanupUiSynchronously();
+
         if (io != null) {
             io.shutdownNow();
             io = null;
@@ -309,6 +334,31 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         windowManager = null;
     }
 
+    private void cleanupUiSynchronously() {
+        final CountDownLatch latch = new CountDownLatch(1);
+        Runnable cleanup = () -> {
+            try {
+                main.removeCallbacksAndMessages(null);
+                forceOverlayPreview = false;
+                manualFotoo = false;
+                dreaming = false;
+                hideDoorbellImmediate();
+                hideNowPlayingImmediate();
+                cleanupStaleOverlayWindows();
+            } finally {
+                latch.countDown();
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            cleanup.run();
+            return;
+        }
+        main.post(cleanup);
+        try { latch.await(3, TimeUnit.SECONDS); } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private void registerDreamReceiver() {
         dreamReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context ignored, Intent intent) {
@@ -317,8 +367,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                     // An exact DreamService start supersedes any temporary
                     // attach/inference state left from an update or preview.
                     dreaming = true;
-                    inferredFotoo = false;
                     forceOverlayPreview = false;
+                    main.removeCallbacks(forcePreviewTimeoutTask);
                     updatePresentation();
                 } else if (Intent.ACTION_DREAMING_STOPPED.equals(action)) {
                     // This is the authoritative signal that Fotoo's Android
@@ -326,9 +376,9 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                     // that could otherwise keep TYPE_APPLICATION_OVERLAY
                     // windows alive over the Kiosk Satellite dashboard.
                     dreaming = false;
-                    inferredFotoo = false;
                     forceOverlayPreview = false;
                     manualFotoo = false;
+                    main.removeCallbacks(forcePreviewTimeoutTask);
                     updatePresentation();
                 }
             }
@@ -352,10 +402,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             @Override public void onActivityStarted(Activity activity) {}
             @Override public void onActivityResumed(Activity activity) {
                 if (!activity.getPackageName().equals(context.getPackageName())) return;
-                boolean changed = manualFotoo || inferredFotoo || forceOverlayPreview;
+                boolean changed = manualFotoo || forceOverlayPreview;
                 manualFotoo = false;
-                inferredFotoo = false;
                 forceOverlayPreview = false;
+                main.removeCallbacks(forcePreviewTimeoutTask);
                 if (changed) updatePresentation();
             }
             @Override public void onActivityPaused(Activity activity) {}
@@ -364,36 +414,6 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             @Override public void onActivityDestroyed(Activity activity) {}
         };
         application.registerActivityLifecycleCallbacks(lifecycleCallbacks);
-    }
-
-    private void detectAlreadyRunningFotoo() {
-        if (context == null || dreaming || manualFotoo || inferredFotoo) return;
-        try {
-            ActivityManager manager =
-                    (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-            if (manager == null) return;
-            java.util.List<ActivityManager.RunningAppProcessInfo> processes =
-                    manager.getRunningAppProcesses();
-            if (processes == null) return;
-            for (ActivityManager.RunningAppProcessInfo process : processes) {
-                boolean fotoo = FOTOO_PACKAGE.equals(process.processName);
-                if (!fotoo && process.pkgList != null) {
-                    for (String pkg : process.pkgList) {
-                        if (FOTOO_PACKAGE.equals(pkg)) {
-                            fotoo = true;
-                            break;
-                        }
-                    }
-                }
-                if (fotoo && process.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE) {
-                    inferredFotoo = true;
-                    updatePresentation();
-                    host.status("Attached to an already-running Fotoo session.", false);
-                    return;
-                }
-            }
-        } catch (Throwable ignored) {
-        }
     }
 
     private void openFotoo() {
@@ -468,10 +488,6 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         String camPosition = stringSetting(values, "cameraPosition");
         cameraPosition = "Top".equals(camPosition) || "Bottom".equals(camPosition) ? camPosition : "Center";
         cameraTestMode = Boolean.TRUE.equals(values.get("cameraTestMode"));
-        if (nowPlayingView != null) nowPlayingView.setAlpha(nowPlayingOpacity / 100f);
-        if (doorbellView != null) {
-            hideDoorbell();
-        }
 
         doorbellInitialSeen = false;
         lastDoorbellState = null;
@@ -482,7 +498,14 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         lastMediaPositionAttr = Double.NaN;
         mediaPositionAnchor = 0;
         mediaPositionAnchorRealtime = SystemClock.elapsedRealtime();
-        main.post(this::updatePresentation);
+        main.post(() -> {
+            // Recreate the camera window on every saved configuration so
+            // opacity, size, position and test-mode changes are guaranteed
+            // to apply to the actual WindowManager window.
+            if (doorbellView != null) hideDoorbell();
+            if (nowPlayingView != null) nowPlayingView.setAlpha(nowPlayingOpacity / 100f);
+            updatePresentation();
+        });
     }
 
     private void readHomeAssistantBaseUrl() {
@@ -495,7 +518,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private boolean fotooActive() {
-        return dreaming || manualFotoo || inferredFotoo || forceOverlayPreview;
+        return dreaming || manualFotoo || forceOverlayPreview;
     }
 
     private void updatePresentation() {
@@ -514,11 +537,15 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         main.post(liveStatePollTask);
 
         if (cameraTestMode && !doorbellCameraEntity.isEmpty()) {
-            showDoorbell();
+            showDoorbell(true);
             pollCameraEntity();
         }
         if (directMusicAssistantAvailable()) {
             pollMusicAssistantQueue();
+            if (maLastSuccessRealtime == 0 ||
+                    SystemClock.elapsedRealtime() - maLastSuccessRealtime > 4000) {
+                pollMediaEntity();
+            }
         } else {
             pollMediaEntity();
         }
@@ -708,8 +735,15 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                     stream = connection.getInputStream();
                     String json = readText(stream);
                     JSONObject response = new JSONObject(json);
-                    Object result = response.opt("result");
-                    if (result instanceof JSONObject) queue = (JSONObject) result;
+                    // Music Assistant's HTTP JSON-RPC /api serializes the
+                    // command result directly. Older/test endpoints may wrap
+                    // it under "result", so accept both shapes.
+                    if (response.has("current_item") || response.has("queue_id")) {
+                        queue = response;
+                    } else {
+                        Object result = response.opt("result");
+                        if (result instanceof JSONObject) queue = (JSONObject) result;
+                    }
                 }
             } catch (Throwable ignored) {
             } finally {
@@ -720,7 +754,15 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             final JSONObject resultQueue = queue;
             main.post(() -> {
                 maQueuePollPending = false;
-                if (resultQueue != null) applyMusicAssistantQueue(resultQueue, base);
+                if (resultQueue != null) {
+                    maLastSuccessRealtime = SystemClock.elapsedRealtime();
+                    applyMusicAssistantQueue(resultQueue, base);
+                } else {
+                    // Never let a direct MA connection failure blank the
+                    // overlay; the configured HA media_player remains a
+                    // fallback source.
+                    pollMediaEntity();
+                }
             });
         });
     }
@@ -922,7 +964,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             lastDoorbellState2 = state;
         }
 
-        if (trigger && fotooActive()) main.post(this::showDoorbell);
+        if (trigger && fotooActive()) main.post(() -> showDoorbell(false));
     }
 
     private void pollSimpleTextEntity(String entity, boolean playlist) {
@@ -951,6 +993,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (nowPlayingView != null || context == null || windowManager == null) return;
 
         LinearLayout card = new LinearLayout(context);
+        card.setTag("fotoo-overlay:nowplaying");
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         int pad = dp(16);
@@ -1021,13 +1064,15 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         });
     }
 
-    private void showDoorbell() {
+    private void showDoorbell(boolean testHold) {
         if (!fotooActive() || context == null || windowManager == null) return;
         main.removeCallbacks(hideDoorbellTask);
         main.removeCallbacks(cameraRefreshTask);
+        if (testHold) doorbellHeldByTest = true;
 
         if (doorbellView == null) {
             FrameLayout frame = new FrameLayout(context);
+            frame.setTag("fotoo-overlay:doorbell");
             frame.setBackground(cardBackground(0xFF000000, 22));
             frame.setAlpha(1f);
 
@@ -1038,7 +1083,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
             doorbellLabel = textView(18, true, Color.WHITE);
-            doorbellLabel.setText(cameraTestMode ? "Dørklokke – TEST" : "Dørklokke");
+            doorbellLabel.setText(doorbellHeldByTest ? "Dørklokke – TEST" : "Dørklokke");
             TextView label = doorbellLabel;
             label.setPadding(dp(14), dp(10), dp(14), dp(10));
             label.setBackground(cardBackground(0xE6000000, 14));
@@ -1077,12 +1122,12 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         }
 
         if (doorbellLabel != null) {
-            doorbellLabel.setText(cameraTestMode ? "Dørklokke – TEST" : "Dørklokke");
+            doorbellLabel.setText(doorbellHeldByTest ? "Dørklokke – TEST" : "Dørklokke");
         }
         pollCameraEntity();
         refreshDoorbellImage();
         main.post(cameraRefreshTask);
-        if (!cameraTestMode) {
+        if (!doorbellHeldByTest) {
             main.postDelayed(hideDoorbellTask, doorbellSeconds * 1000L);
         }
     }
@@ -1129,6 +1174,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private void hideDoorbell() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            main.post(this::hideDoorbell);
+            return;
+        }
         main.removeCallbacks(hideDoorbellTask);
         main.removeCallbacks(cameraRefreshTask);
         hideDoorbellImmediate();
@@ -1140,12 +1189,17 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         doorbellImage = null;
         doorbellLabel = null;
         cameraFetchPending = false;
+        doorbellHeldByTest = false;
         if (view != null && windowManager != null) {
             try { windowManager.removeViewImmediate(view); } catch (Throwable ignored) {}
         }
     }
 
     private void hideNowPlaying() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            main.post(this::hideNowPlaying);
+            return;
+        }
         hideNowPlayingImmediate();
     }
 
@@ -1170,7 +1224,8 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.8.4 test");
+        test.setTag("fotoo-overlay:test");
+        test.setText("Fotoo Overlay 0.8.5 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
@@ -1216,6 +1271,66 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         );
         params.alpha = 1f;
         return params;
+    }
+
+    private void cleanupStaleOverlayWindows() {
+        if (Looper.myLooper() != Looper.getMainLooper() || windowManager == null) return;
+        try {
+            Class<?> globalClass = Class.forName("android.view.WindowManagerGlobal");
+            Method getInstance = globalClass.getDeclaredMethod("getInstance");
+            getInstance.setAccessible(true);
+            Object global = getInstance.invoke(null);
+            Field viewsField = globalClass.getDeclaredField("mViews");
+            Field paramsField = globalClass.getDeclaredField("mParams");
+            viewsField.setAccessible(true);
+            paramsField.setAccessible(true);
+            Object viewsObject = viewsField.get(global);
+            Object paramsObject = paramsField.get(global);
+            if (!(viewsObject instanceof java.util.List) ||
+                    !(paramsObject instanceof java.util.List)) return;
+            java.util.List<?> views = (java.util.List<?>) viewsObject;
+            java.util.List<?> params = (java.util.List<?>) paramsObject;
+            java.util.List<View> stale = new java.util.ArrayList<>();
+            int count = Math.min(views.size(), params.size());
+            for (int i = 0; i < count; i++) {
+                Object v = views.get(i);
+                Object p = params.get(i);
+                if (!(v instanceof View) || !(p instanceof WindowManager.LayoutParams)) continue;
+                WindowManager.LayoutParams lp = (WindowManager.LayoutParams) p;
+                boolean overlayType = lp.type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY ||
+                        lp.type == WindowManager.LayoutParams.TYPE_PHONE;
+                if (!overlayType) continue;
+                View view = (View) v;
+                Object tag = view.getTag();
+                if (tag instanceof String && ((String) tag).startsWith("fotoo-overlay:")) {
+                    stale.add(view);
+                    continue;
+                }
+                // Versions before 0.8.5 did not tag the root. The camera
+                // overlay is still uniquely identifiable by its own label.
+                if (containsDoorbellOverlayLabel(view)) stale.add(view);
+            }
+            for (View view : stale) {
+                try { windowManager.removeViewImmediate(view); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {
+            // Hidden WindowManager internals are best-effort only. A normal
+            // app/process restart also clears any window from an older session.
+        }
+    }
+
+    private boolean containsDoorbellOverlayLabel(View view) {
+        if (view instanceof TextView) {
+            CharSequence text = ((TextView) view).getText();
+            if (text != null && text.toString().startsWith("Dørklokke")) return true;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (containsDoorbellOverlayLabel(group.getChildAt(i))) return true;
+            }
+        }
+        return false;
     }
 
     private WindowManager.LayoutParams overlayParams(int width, int height) {
