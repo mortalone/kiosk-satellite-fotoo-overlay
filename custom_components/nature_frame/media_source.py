@@ -60,6 +60,8 @@ class NatureFrameMediaSource(MediaSource):
         identifier = item.identifier or ""
 
         if not identifier:
+            selected = _selected_gallery(self.hass, catalog)
+            gallery = catalog.gallery(selected)
             return BrowseMediaSource(
                 domain=DOMAIN,
                 identifier=None,
@@ -69,9 +71,18 @@ class NatureFrameMediaSource(MediaSource):
                 can_play=False,
                 can_expand=True,
                 children_media_class=MediaClass.DIRECTORY,
+                thumbnail=gallery.thumbnail if gallery else None,
                 children=[
-                    self._folder("active/portrait", "Active gallery · Portrait"),
-                    self._folder("active/landscape", "Active gallery · Landscape"),
+                    self._folder(
+                        "active/portrait",
+                        "Active gallery · Portrait",
+                        gallery.thumbnail if gallery else None,
+                    ),
+                    self._folder(
+                        "active/landscape",
+                        "Active gallery · Landscape",
+                        gallery.thumbnail if gallery else None,
+                    ),
                     self._folder("galleries", "All galleries"),
                 ],
             )
@@ -81,7 +92,11 @@ class NatureFrameMediaSource(MediaSource):
             for key in catalog.gallery_keys():
                 gallery = catalog.gallery(key)
                 if gallery:
-                    children.append(self._folder(f"gallery/{key}", gallery.title))
+                    children.append(
+                        self._folder(
+                            f"gallery/{key}", gallery.title, gallery.thumbnail
+                        )
+                    )
             return self._directory(identifier, "All galleries", children)
 
         if identifier.startswith("gallery/") and identifier.count("/") == 1:
@@ -89,13 +104,24 @@ class NatureFrameMediaSource(MediaSource):
             gallery = catalog.gallery(key)
             if not gallery:
                 raise BrowseError("Unknown Nature Frame gallery")
+            portrait_thumb = (
+                gallery.portrait[0].thumbnail if gallery.portrait else gallery.thumbnail
+            )
+            landscape_thumb = (
+                gallery.landscape[0].thumbnail if gallery.landscape else gallery.thumbnail
+            )
             return self._directory(
                 identifier,
                 gallery.title,
                 [
-                    self._folder(f"gallery/{key}/portrait", "Portrait"),
-                    self._folder(f"gallery/{key}/landscape", "Landscape"),
+                    self._folder(
+                        f"gallery/{key}/portrait", "Portrait", portrait_thumb
+                    ),
+                    self._folder(
+                        f"gallery/{key}/landscape", "Landscape", landscape_thumb
+                    ),
                 ],
+                gallery.thumbnail,
             )
 
         if identifier in {"active/portrait", "active/landscape"}:
@@ -106,6 +132,7 @@ class NatureFrameMediaSource(MediaSource):
                 identifier,
                 f"{gallery.title if gallery else key} · {orientation.title()}",
                 self._image_children(catalog, key, orientation),
+                gallery.thumbnail if gallery else None,
             )
 
         parts = identifier.split("/")
@@ -120,11 +147,14 @@ class NatureFrameMediaSource(MediaSource):
                 identifier,
                 f"{gallery.title} · {orientation.title()}",
                 self._image_children(catalog, key, orientation),
+                gallery.thumbnail,
             )
 
         raise BrowseError("Unknown Nature Frame item")
 
-    def _folder(self, identifier: str, title: str) -> BrowseMediaSource:
+    def _folder(
+        self, identifier: str, title: str, thumbnail: str | None = None
+    ) -> BrowseMediaSource:
         return BrowseMediaSource(
             domain=DOMAIN,
             identifier=identifier,
@@ -134,6 +164,7 @@ class NatureFrameMediaSource(MediaSource):
             can_play=False,
             can_expand=True,
             children_media_class=MediaClass.IMAGE,
+            thumbnail=thumbnail,
         )
 
     def _directory(
@@ -141,6 +172,7 @@ class NatureFrameMediaSource(MediaSource):
         identifier: str,
         title: str,
         children: list[BrowseMediaSource],
+        thumbnail: str | None = None,
     ) -> BrowseMediaSource:
         return BrowseMediaSource(
             domain=DOMAIN,
@@ -152,6 +184,7 @@ class NatureFrameMediaSource(MediaSource):
             can_expand=True,
             children_media_class=MediaClass.IMAGE,
             children=children,
+            thumbnail=thumbnail,
         )
 
     def _image_children(
@@ -169,6 +202,7 @@ class NatureFrameMediaSource(MediaSource):
                 title=image.title,
                 can_play=True,
                 can_expand=False,
+                thumbnail=image.thumbnail or image.url,
             )
             for image in catalog.images(gallery_key, orientation)
         ]

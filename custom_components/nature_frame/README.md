@@ -1,32 +1,36 @@
 # Nature Frame Home Assistant integration
 
-Nature Frame is now a **streaming media source** for Home Assistant.
+Nature Frame is a streaming Media Source for Home Assistant. It builds small
+remote catalog indexes and resolves an image only when it is displayed. It does
+not need to download entire galleries to the Home Assistant machine.
 
-It no longer needs to download an entire gallery before Kiosk Satellite can use it. The integration fetches a small catalog/index from the source repository, exposes the images through Home Assistant's Media Source browser, and Kiosk Satellite resolves each image URL only when that slide is shown.
+## 0.4.0
 
-## Lovelace
+- Adds real thumbnails to the Home Assistant Media Browser.
+- Adds separate streaming galleries:
+  - Birds · Inky Bird Frame
+  - Mammal illustrations · Joseph Smit
+  - Mammals · Featured photography
+  - Night sky · Featured astronomy
+  - Aurora · Featured pictures
+  - Galaxies · Featured pictures
+- Wikimedia Commons galleries use Commons' 1200 px derivative images rather
+  than multi-megabyte originals.
+- Portrait and landscape items are split from source dimensions.
+- The Lovelace entity `select.nature_frame_gallery` controls which gallery
+  appears under **Active gallery**.
 
-The integration creates:
+## Kiosk Satellite
 
-`select.nature_frame_gallery`
+Point the portrait kiosk permanently at:
 
-Use it as a dropdown/tile on Lovelace. Kiosk Satellite can stay pointed at:
+`media-source://nature_frame/active/portrait`
 
-**Nature Frame → Active gallery · Portrait**
+Then change `select.nature_frame_gallery` from Lovelace.
 
-Changing the select changes which gallery the active folder exposes the next time Kiosk Satellite builds its playlist.
+## Copyright and private posters
 
-## Storage
-
-Streaming mode stores no full image collection on the Home Assistant machine. The old **Nature Frame Sync** app/add-on remains optional for a future offline-cache mode, but it is not required for normal use.
-
-## Orientation
-
-- Active gallery · Portrait → portrait assets
-- Active gallery · Landscape → landscape assets
-
-The Inky Bird Frame provider currently exposes 176 approved species in each orientation.
-
-## Future collections
-
-Additional providers (night sky, mammals, nature, insects, etc.) can be added as separate galleries. They will appear as extra options in `select.nature_frame_gallery`.
+Only freely licensed/publicly reusable sources should be built into the public
+integration. Copyrighted posters owned by the household should instead be added
+through a private/local collection; they must not be redistributed in this
+public repository.
