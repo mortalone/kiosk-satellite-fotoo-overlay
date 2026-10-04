@@ -111,6 +111,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private String mediaState;
     private Map<?, ?> mediaAttributes = Collections.emptyMap();
     private String mediaIdentity = "";
+    private String preferredHaArtwork = "";
     private double mediaPositionAnchor = 0;
     private double lastMediaPositionAttr = Double.NaN;
     private long mediaPositionAnchorRealtime = SystemClock.elapsedRealtime();
@@ -319,6 +320,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         Map<?, ?> attrs = attrsValue instanceof Map ? (Map<?, ?>) attrsValue : Collections.emptyMap();
 
         if (entityId.equals(nowPlayingEntity)) {
+            preferredHaArtwork = attr(attrs, "entity_picture", "");
             applyMediaSnapshot(state, attrs);
         }
 
@@ -566,9 +568,13 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         lastDoorbellState = null;
         doorbellInitialSeen2 = false;
         lastDoorbellState2 = null;
-        loadedMediaPicture = null;
-        renderedMediaPicture = null;
+        loadedMediaPicture = "";
+        renderedMediaPicture = "";
+        renderedMediaPictureKey = "";
+        preferredHaArtwork = "";
         mediaIdentity = "";
+        mediaImageRequestSerial++;
+        main.removeCallbacks(clearMediaImageTask);
         lastMediaPositionAttr = Double.NaN;
         mediaPositionAnchor = 0;
         mediaPositionAnchorRealtime = SystemClock.elapsedRealtime();
@@ -774,14 +780,38 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
         updateProgress();
 
-        String picture = attr(mediaAttributes, "entity_picture", "");
-        if (!picture.equals(loadedMediaPicture)) {
-            loadedMediaPicture = picture;
-            if (!picture.equals(renderedMediaPicture)) mediaImage.setImageDrawable(null);
+        String picture = attr(mediaAttributes, "entity_picture", "").trim();
+        loadedMediaPicture = picture;
+
+        if (picture.isEmpty()) {
+            // Metadata can briefly arrive without artwork during a track
+            // change. Keep the previous bitmap visible instead of flashing
+            // blank, and only clear it if artwork is still absent later.
+            main.removeCallbacks(clearMediaImageTask);
+            main.postDelayed(clearMediaImageTask, 2500);
+            return;
         }
-        if (!picture.isEmpty() && !picture.equals(renderedMediaPicture) && !mediaFetchPending) {
-            fetchMediaImage(picture);
+
+        main.removeCallbacks(clearMediaImageTask);
+        String pictureKey = mediaPictureKey(picture);
+        Bitmap cached = mediaImageCache.get(pictureKey);
+        if (cached != null) {
+            if (!pictureKey.equals(renderedMediaPictureKey)) {
+                mediaImage.setImageBitmap(cached);
+            }
+            renderedMediaPicture = picture;
+            renderedMediaPictureKey = pictureKey;
+            return;
         }
+
+        // HA proxy tokens may change while the underlying cover does not.
+        // Compare a stable key rather than the complete signed URL.
+        if (pictureKey.equals(renderedMediaPictureKey)) {
+            renderedMediaPicture = picture;
+            return;
+        }
+
+        if (!mediaFetchPending) fetchMediaImage(picture);
     }
 
     private void updateProgress() {
@@ -1034,6 +1064,13 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             }
         }
         merged.putAll(attrs);
+        // Never oscillate the cover between MA's queue image proxy and the
+        // explicitly selected HA media_player's entity_picture. HA is the
+        // stable primary artwork source; MA only fills the gap when HA has
+        // none.
+        if (!preferredHaArtwork.isEmpty()) {
+            merged.put("entity_picture", preferredHaArtwork);
+        }
         applyMediaSnapshot(mediaState, merged);
     }
 
@@ -1105,6 +1142,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             String state = snapshot.get("state") == null ? null : String.valueOf(snapshot.get("state"));
             Object attrsValue = snapshot.get("attributes");
             Map<?, ?> attrs = attrsValue instanceof Map ? (Map<?, ?>) attrsValue : Collections.emptyMap();
+            preferredHaArtwork = attr(attrs, "entity_picture", "");
             applyMediaSnapshot(state, attrs);
         });
     }
@@ -1275,30 +1313,77 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private void fetchMediaImage(String path) {
         if (mediaFetchPending || io == null || path == null || path.isEmpty()) return;
+        final String key = mediaPictureKey(path);
+        Bitmap cached = mediaImageCache.get(key);
+        if (cached != null) {
+            if (mediaImage != null) mediaImage.setImageBitmap(cached);
+            renderedMediaPicture = path;
+            renderedMediaPictureKey = key;
+            return;
+        }
+
         String resolved = resolveHaUrl(path);
         if (resolved == null) return;
+
         mediaFetchPending = true;
+        final long requestSerial = ++mediaImageRequestSerial;
         io.execute(() -> {
             Bitmap bitmap = fetchBitmap(resolved, false);
             main.post(() -> {
                 mediaFetchPending = false;
                 if (mediaImage == null) return;
-                if (bitmap != null && path.equals(loadedMediaPicture)) {
-                    mediaImage.setImageBitmap(bitmap);
-                    renderedMediaPicture = path;
-                    return;
+
+                String target = loadedMediaPicture == null ? "" : loadedMediaPicture;
+                String targetKey = mediaPictureKey(target);
+
+                if (bitmap != null) {
+                    mediaImageCache.put(key, bitmap);
+                    if (requestSerial == mediaImageRequestSerial &&
+                            key.equals(targetKey)) {
+                        // Atomic swap: the previous artwork remains visible
+                        // until the new bitmap has decoded successfully.
+                        mediaImage.setImageBitmap(bitmap);
+                        renderedMediaPicture = target;
+                        renderedMediaPictureKey = key;
+                        return;
+                    }
                 }
-                // If the track/image URL changed while an older fetch was in
-                // flight, immediately fetch the new target. If the current
-                // target failed (MA image proxy can lag metadata briefly),
-                // retry once a second until it succeeds or the track changes.
-                String target = loadedMediaPicture;
-                if (target != null && !target.isEmpty() &&
-                        !target.equals(renderedMediaPicture)) {
-                    main.postDelayed(() -> fetchMediaImage(target), 1000);
+
+                // A newer target may have appeared while this request was in
+                // flight, or the HA/MA image proxy may need a moment after a
+                // track change. Keep the old bitmap and retry the current
+                // target without ever flashing the ImageView blank.
+                if (!target.isEmpty() &&
+                        !targetKey.equals(renderedMediaPictureKey)) {
+                    main.postDelayed(() -> fetchMediaImage(target), 1200);
                 }
             });
         });
+    }
+
+    private static String mediaPictureKey(String path) {
+        if (path == null || path.isEmpty()) return "";
+        int query = path.indexOf('?');
+        if (query < 0) return path;
+
+        String base = path.substring(0, query);
+        String[] parts = path.substring(query + 1).split("&");
+        StringBuilder kept = new StringBuilder();
+        for (String part : parts) {
+            if (part.isEmpty()) continue;
+            int equals = part.indexOf('=');
+            String name = (equals < 0 ? part : part.substring(0, equals))
+                    .toLowerCase(java.util.Locale.ROOT);
+            if ("token".equals(name) ||
+                    "access_token".equals(name) ||
+                    "authsig".equals(name) ||
+                    "_ks".equals(name)) {
+                continue;
+            }
+            if (kept.length() > 0) kept.append('&');
+            kept.append(part);
+        }
+        return kept.length() == 0 ? base : base + "?" + kept;
     }
 
     private void showDoorbell(boolean testHold) {
