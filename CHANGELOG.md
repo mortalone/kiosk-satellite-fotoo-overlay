@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.11.2
+
+- Fixes Now Playing failing to appear for the explicitly selected Home Assistant
+  media_player when Kiosk Satellite also has its own Music Assistant / Sendspin
+  player configured.
+- The selected Home Assistant media_player is now authoritative for
+  playing/paused/idle state; direct Music Assistant data only enriches artwork,
+  title and queue metadata.
+- Now Playing is polled from Home Assistant continuously while an eligible
+  screensaver is active, including Kiosk Satellite's own screensavers.
+- Adds **Center** as a Now Playing position.
+- Adds **Now Playing width** from 30–100% of screen width, so the overlay can
+  fit between Kiosk Satellite screensaver widgets.
+- Saving plugin settings now rebuilds the Now Playing overlay window so geometry
+  changes apply immediately.
+- Removes the rarely needed optional playlist-name entity from the settings UI
+  to stay within Kiosk Satellite SDK 1's 20-setting manifest limit. Playlist /
+  source display still works from media_player and Music Assistant metadata.
+
 ## 0.11.1
 
 - Packages Nature Frame 0.8.1.
