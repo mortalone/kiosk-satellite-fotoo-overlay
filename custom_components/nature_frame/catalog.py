@@ -200,7 +200,7 @@ class NatureFrameCatalog:
         session = async_get_clientsession(self.hass)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "HomeAssistant-NatureFrame/0.6.0",
+            "User-Agent": "HomeAssistant-NatureFrame/0.7.1",
         }
         async with session.get(
             url, params=params, headers=headers, timeout=30
