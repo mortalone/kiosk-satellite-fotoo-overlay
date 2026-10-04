@@ -93,6 +93,66 @@ COMMONS_GALLERIES: dict[str, CommonsGallerySpec] = {
     ),
 }
 
+# Small built-in fallbacks keep the named public collections available even
+# when the Wikimedia API is temporarily unreachable from Home Assistant.
+# The normal API catalogue still wins and provides the much larger library.
+COMMONS_FALLBACK_FILES: dict[str, tuple[tuple[str, int, int], ...]] = {
+    "zoo-swainson": (
+        ("Zoological Illustrations Volume I Plate 1.jpg", 1625, 2177),
+        ("Zoological Illustrations Volume I Plate 10.jpg", 1617, 2517),
+        ("Zoological Illustrations Volume I Plate 11.jpg", 1818, 2928),
+        ("Zoological Illustrations Volume I Plate 13.jpg", 1717, 2825),
+        ("Zoological Illustrations Volume I Plate 14.jpg", 1769, 2641),
+        ("Zoological Illustrations Volume I Plate 15.jpg", 1573, 2768),
+        ("Zoological Illustrations Volume I Plate 16.jpg", 1891, 2913),
+        ("Zoological Illustrations Volume I Plate 18.jpg", 1553, 2601),
+        ("Zoological Illustrations Volume II Series 2 056.jpg", 2017, 2973),
+        ("Zoological Illustrations Volume II Series 2 063.jpg", 1733, 3181),
+        ("Zoological Illustrations Volume II Series 2 080.jpg", 1800, 3000),
+        ("Zoological Illustrations Volume III Plate 120.jpg", 1505, 2585),
+        ("Zoological Illustrations Volume III Plate 121.jpg", 1839, 2873),
+        ("Zoological Illustrations Volume III Plate 122.jpg", 1733, 2609),
+        ("Zoological Illustrations Volume III Plate 123.jpg", 1609, 2669),
+        ("Zoological Illustrations Volume III Plate 124.jpg", 1541, 2853),
+        ("Zoological Illustrations Volume III Plate 125.jpg", 1847, 2761),
+        ("Zoological Illustrations Volume III Plate 126.jpg", 1449, 2577),
+        ("Zoological Illustrations Volume III Plate 127.jpg", 1501, 2925),
+    ),
+    "kitchen-pomological": (
+        ("Pomological Watercolor POM00000001.jpg", 2629, 4000),
+        ("Pomological Watercolor POM00000002.jpg", 2835, 4000),
+        ("Pomological Watercolor POM00000003.jpg", 2814, 4000),
+        ("Pomological Watercolor POM00000004.jpg", 3187, 4000),
+        ("Pomological Watercolor POM00000005.jpg", 2690, 4000),
+        ("Pomological Watercolor POM00000006.jpg", 3217, 4000),
+        ("Pomological Watercolor POM00000007.jpg", 2968, 4000),
+        ("Pomological Watercolor POM00000008.jpg", 2774, 4000),
+        ("Pomological Watercolor POM00000009.jpg", 3246, 4000),
+        ("Pomological Watercolor POM00000010.jpg", 2651, 4000),
+        ("Pomological Watercolor POM00000011.jpg", 3274, 4000),
+        ("Pomological Watercolor POM00000012.jpg", 3170, 4000),
+    ),
+    "kitchen-kohler": (
+        ("Köhler's Medizinal-Pflanzen in naturgetreuen Abbildungen mit kurz erläuterndem Texte (Plate 100) (8231716529).jpg", 1405, 2032),
+        ("Köhler's Medizinal-Pflanzen in naturgetreuen Abbildungen mit kurz erläuterndem Texte (Plate 101) (8231717005).jpg", 1402, 1993),
+        ("Köhler's Medizinal-Pflanzen in naturgetreuen Abbildungen mit kurz erläuterndem Texte (Plate 102) (8232779960).jpg", 1393, 2014),
+        ("Köhler's Medizinal-Pflanzen in naturgetreuen Abbildungen mit kurz erläuterndem Texte (Plate 103) (8232780324).jpg", 1408, 1984),
+        ("Köhler's Medizinal-Pflanzen in naturgetreuen Abbildungen mit kurz erläuterndem Texte (Plate 104) (8231718261).jpg", 1426, 1990),
+        ("Köhler's Medizinal-Pflanzen in naturgetreuen Abbildungen mit kurz erläuterndem Texte (Plate 105) (8231718775).jpg", 1420, 1966),
+        ("Köhler's Medizinal-Pflanzen in naturgetreuen Abbildungen mit kurz erläuterndem Texte (Plate 106) (8231719251).jpg", 1375, 1975),
+        ("Köhler's Medizinal-Pflanzen in naturgetreuen Abbildungen mit kurz erläuterndem Texte (Plate 107) (8231719867).jpg", 1441, 1948),
+    ),
+    "kitchen-beeton": (
+        ("A Dinner Table from Mrs. Beeton& -39;s Book of Household Management. Digitally enhanced from our own 1923 edition.jpg", 1562, 2500),
+        ("A Supper Buffet for Ball or Reception from Mrs. Beeton& -39;s Book of Household Management. Digitally enhanced from our own 1923 edition.jpg", 2500, 1786),
+        ("Puddingsbhm.jpg", 449, 762),
+        ("Mrs Beeton (p1710).jpg", 2035, 3076),
+        ("Mrs Beeton (p1711).jpg", 1993, 3016),
+        ("Mrs Beeton (p1712).jpg", 1985, 2997),
+        ("Mrs Beeton (p1713).jpg", 1989, 3013),
+    ),
+}
+
 VIRTUAL_GALLERIES: dict[str, tuple[str, tuple[str, ...]]] = {
     "kitchen-mixed": (
         "Kitchen · Mixed",
@@ -164,16 +224,24 @@ class NatureFrameCatalog:
                 except Exception:
                     pass
 
+                commons_items = list(COMMONS_GALLERIES.items())
                 results = await asyncio.gather(
                     *[
                         self._async_load_commons(key, spec)
-                        for key, spec in COMMONS_GALLERIES.items()
+                        for key, spec in commons_items
                     ],
                     return_exceptions=True,
                 )
-                for result in results:
+                for (key, spec), result in zip(commons_items, results):
                     if isinstance(result, NatureGallery):
                         remote[result.key] = result
+                    else:
+                        fallback_gallery = self._fallback_commons_gallery(
+                            key,
+                            spec,
+                        )
+                        if fallback_gallery:
+                            remote[key] = fallback_gallery
 
                 for key, (title, members) in VIRTUAL_GALLERIES.items():
                     gallery = self._build_virtual_gallery(key, title, members, remote)
@@ -367,6 +435,51 @@ class NatureFrameCatalog:
 
         source_categories = "; ".join(
             f"https://commons.wikimedia.org/wiki/Category:{category.replace(' ', '_')}"
+            for category in spec.categories
+        )
+        return NatureGallery(
+            key=key,
+            title=spec.title,
+            source=source_categories,
+            portrait=tuple(portrait),
+            landscape=tuple(landscape),
+        )
+
+    def _fallback_commons_gallery(
+        self,
+        key: str,
+        spec: CommonsGallerySpec,
+    ) -> NatureGallery | None:
+        files = COMMONS_FALLBACK_FILES.get(key)
+        if not files:
+            return None
+
+        portrait: list[NatureImage] = []
+        landscape: list[NatureImage] = []
+        for index, (filename, width, height) in enumerate(files):
+            encoded = quote(filename, safe="")
+            url = (
+                "https://commons.wikimedia.org/wiki/"
+                f"Special:Redirect/file/{encoded}?width={COMMONS_THUMB_WIDTH}"
+            )
+            image = NatureImage(
+                key=f"fallback-{key}-{index}",
+                title=re.sub(r"\.(?:jpe?g|png|webp)$", "", filename, flags=re.I),
+                orientation="portrait" if height >= width else "landscape",
+                url=url,
+                thumbnail=url,
+                mime_type="image/jpeg",
+                source=(
+                    "https://commons.wikimedia.org/wiki/File:"
+                    + quote(filename.replace(" ", "_"), safe="():,_-.")
+                ),
+                license="Public domain / see Wikimedia Commons file page",
+            )
+            (portrait if height >= width else landscape).append(image)
+
+        source_categories = "; ".join(
+            "https://commons.wikimedia.org/wiki/Category:"
+            + quote(category.replace(" ", "_"), safe="():,_-.")
             for category in spec.categories
         )
         return NatureGallery(
