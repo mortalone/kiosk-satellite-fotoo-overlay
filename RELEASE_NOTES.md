@@ -1,23 +1,25 @@
+## Screensaver Overlay 0.10.1
+
+The existing custom overlays now work on **Kiosk Satellite's own screensavers**,
+not only Fotoo.
+
+- Uses Kiosk Satellite's official `screensaver.state` and `screensaver.view`
+  plugin events.
+- Keeps the custom Now Playing card, artwork, progress bar and Music Assistant
+  queue handling.
+- Keeps the existing dual door/person triggers and camera overlay.
+- Adds separate settings for **Show on Kiosk Satellite screensavers** and
+  **Show on Fotoo**.
+- Black/blank screensavers remain untouched.
+- The plugin reads initial screensaver state at startup so it can attach to a
+  slideshow that is already running.
+- Fotoo support remains available.
+
 ## Nature Frame 0.6.0
 
-This repository release packages the new Nature Frame collection model:
+The same repository contains the current Nature Frame integration with the
+curated Zoo/Kitchen collections, private Zoo collection, multi-collection
+switches and balanced active playlists.
 
-- Zoo · Public · Swainson
-- Zoo · Private
-- Kitchen · USDA Pomological Watercolors
-- Kitchen · Köhler Botanical Plates
-- Kitchen · Mrs Beeton Plates
-- Kitchen · Mixed
-- Art · Misc · Curated
-- balanced weighting when several collections are active
-- thumbnails and stable Active collections media paths retained
-
-The broad Zoo-art category has been removed in favor of a coherent named series.
-
-For poster-like images, use **Fill the screen = Off** during testing. The
-current Kiosk Satellite Smart mode can crop the artwork; the dedicated ambient
-blurred/no-crop renderer is not part of this release.
-
-## Fotoo Overlay 0.9.0
-
-Packaging/version bump only; overlay behavior is unchanged from 0.8.9.
+For poster-like artwork, use **Fill the screen = Off** during testing because
+Kiosk Satellite Smart fill can crop the complete image on the tested device.
