@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Fotoo Overlay",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Android overlays above Fotoo with reliable lifecycle cleanup, Music Assistant queue tracking, simultaneous doorbell camera, dual triggers, solid camera rendering, adjustable camera size/position and progress.",
+  "description": "Native Android overlays above Fotoo with reliable lifecycle cleanup, Music Assistant queue tracking and artwork retry, simultaneous doorbell camera, dual triggers, true solid camera mode, adjustable camera size/position and progress.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
@@ -154,7 +154,7 @@
       "step": 5,
       "unit": "%",
       "group": "Doorbell",
-      "description": "Camera image visibility. 100% uses a hard solid mode: fully opaque camera pixels on an opaque black backing, with no parent-layer translucency."
+      "description": "Camera visibility. At 100% the camera window is rendered as a fully opaque RGB surface. Touches inside the camera rectangle are then consumed by the overlay; outside it they still reach Fotoo."
     },
     {
       "key": "cameraWidthPercent",

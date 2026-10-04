@@ -136,6 +136,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private ProgressBar mediaProgress;
     private TextView mediaTime;
     private String loadedMediaPicture;
+    private String renderedMediaPicture;
     private boolean mediaFetchPending;
 
     private View doorbellView;
@@ -494,6 +495,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         doorbellInitialSeen2 = false;
         lastDoorbellState2 = null;
         loadedMediaPicture = null;
+        renderedMediaPicture = null;
         mediaIdentity = "";
         lastMediaPositionAttr = Double.NaN;
         mediaPositionAnchor = 0;
@@ -590,8 +592,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         String picture = attr(mediaAttributes, "entity_picture", "");
         if (!picture.equals(loadedMediaPicture)) {
             loadedMediaPicture = picture;
-            mediaImage.setImageDrawable(null);
-            if (!picture.isEmpty()) fetchMediaImage(picture);
+            if (!picture.equals(renderedMediaPicture)) mediaImage.setImageDrawable(null);
+        }
+        if (!picture.isEmpty() && !picture.equals(renderedMediaPicture) && !mediaFetchPending) {
+            fetchMediaImage(picture);
         }
     }
 
@@ -812,6 +816,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
         String artwork = jsonText(live, "image_url");
         if (artwork.isEmpty()) artwork = musicAssistantArtwork(item.opt("image"), base);
+        // Some queue snapshots expose the track immediately but add artwork a
+        // moment later. Do not blank a cover already learned from HA or the
+        // previous snapshot while waiting for MA's image metadata.
+        if (artwork.isEmpty()) artwork = attr(mediaAttributes, "entity_picture", "");
 
         Map<String, Object> attrs = new HashMap<>();
         attrs.put("media_title", title);
@@ -1049,7 +1057,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private void fetchMediaImage(String path) {
-        if (mediaFetchPending || io == null) return;
+        if (mediaFetchPending || io == null || path == null || path.isEmpty()) return;
         String resolved = resolveHaUrl(path);
         if (resolved == null) return;
         mediaFetchPending = true;
@@ -1057,8 +1065,20 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             Bitmap bitmap = fetchBitmap(resolved, false);
             main.post(() -> {
                 mediaFetchPending = false;
-                if (bitmap != null && mediaImage != null && path.equals(loadedMediaPicture)) {
+                if (mediaImage == null) return;
+                if (bitmap != null && path.equals(loadedMediaPicture)) {
                     mediaImage.setImageBitmap(bitmap);
+                    renderedMediaPicture = path;
+                    return;
+                }
+                // If the track/image URL changed while an older fetch was in
+                // flight, immediately fetch the new target. If the current
+                // target failed (MA image proxy can lag metadata briefly),
+                // retry once a second until it succeeds or the track changes.
+                String target = loadedMediaPicture;
+                if (target != null && !target.isEmpty() &&
+                        !target.equals(renderedMediaPicture)) {
+                    main.postDelayed(() -> fetchMediaImage(target), 1000);
                 }
             });
         });
@@ -1075,6 +1095,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             frame.setTag("fotoo-overlay:doorbell");
             frame.setBackground(cardBackground(0xFF000000, 22));
             frame.setAlpha(1f);
+            if (cameraOpacity >= 100) {
+                frame.setClickable(true);
+                frame.setOnClickListener(v -> { /* consume touch; outside the window Fotoo still receives taps */ });
+            }
 
             doorbellImage = new ImageView(context);
             doorbellImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -1216,6 +1240,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         mediaProgress = null;
         mediaTime = null;
         mediaFetchPending = false;
+        renderedMediaPicture = null;
         if (view != null && windowManager != null) {
             try { windowManager.removeViewImmediate(view); } catch (Throwable ignored) {}
         }
@@ -1225,7 +1250,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
         test.setTag("fotoo-overlay:test");
-        test.setText("Fotoo Overlay 0.8.5 test");
+        test.setText("Fotoo Overlay 0.8.6 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
@@ -1257,17 +1282,21 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private WindowManager.LayoutParams cameraOverlayParams(int width, int height) {
+        int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+        if (cameraOpacity < 100) {
+            // A translucent camera is deliberately pass-through.
+            flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        }
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 width,
                 height,
                 Build.VERSION.SDK_INT >= 26
                         ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                         : WindowManager.LayoutParams.TYPE_PHONE,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                cameraOpacity >= 100 ? PixelFormat.OPAQUE : PixelFormat.TRANSLUCENT
+                flags,
+                cameraOpacity >= 100 ? PixelFormat.RGB_565 : PixelFormat.TRANSLUCENT
         );
         params.alpha = 1f;
         return params;
