@@ -221,6 +221,9 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     public synchronized void execute(String command, Map<String, Object> arguments) {
         if ("openFotoo".equals(command)) {
             openFotoo();
+        } else if ("attachNow".equals(command)) {
+            forceOverlayPreview = true;
+            main.post(this::updatePresentation);
         } else if ("test".equals(command)) {
             showTestOverlay();
         } else if ("hide".equals(command)) {
@@ -337,7 +340,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
                 boolean changed = manualFotoo || inferredFotoo || forceOverlayPreview;
                 manualFotoo = false;
                 inferredFotoo = false;
-                if (forceOverlayPreview) clearForcePreviewSetting();
+                forceOverlayPreview = false;
                 if (changed) updatePresentation();
             }
             @Override public void onActivityPaused(Activity activity) {}
@@ -450,8 +453,6 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         String camPosition = stringSetting(values, "cameraPosition");
         cameraPosition = "Top".equals(camPosition) || "Bottom".equals(camPosition) ? camPosition : "Center";
         cameraTestMode = Boolean.TRUE.equals(values.get("cameraTestMode"));
-        forceOverlayPreview = Boolean.TRUE.equals(values.get("forceOverlayPreview"));
-
         if (nowPlayingView != null) nowPlayingView.setAlpha(nowPlayingOpacity / 100f);
         if (doorbellView != null) {
             hideDoorbell();
@@ -480,18 +481,6 @@ public final class FotooOverlayPlugin implements KioskPlugin {
 
     private boolean fotooActive() {
         return dreaming || manualFotoo || inferredFotoo || forceOverlayPreview;
-    }
-
-    private void clearForcePreviewSetting() {
-        forceOverlayPreview = false;
-        if (settings == null || host == null) return;
-        try {
-            Map<String, Object> next = new HashMap<>(settings);
-            next.put("forceOverlayPreview", false);
-            settings = next;
-            host.saveSettings(next);
-        } catch (Throwable ignored) {
-        }
     }
 
     private void updatePresentation() {
@@ -1166,7 +1155,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.8.0 test");
+        test.setText("Fotoo Overlay 0.8.1 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
