@@ -1,0 +1,25 @@
+name: Nature Frame syntax
+
+on:
+  push:
+    paths:
+      - "custom_components/nature_frame/**"
+      - ".github/workflows/nature-frame.yml"
+  pull_request:
+    paths:
+      - "custom_components/nature_frame/**"
+      - ".github/workflows/nature-frame.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Compile Nature Frame Python
+        run: python -m py_compile custom_components/nature_frame/*.py
