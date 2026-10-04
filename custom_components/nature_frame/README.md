@@ -3,33 +3,48 @@
 Nature Frame is a streaming Media Source for Home Assistant for Kiosk Satellite
 and other Home Assistant media consumers.
 
-## 0.7.2
+## 0.8.0
 
 ### One collection profile per screen
 
-Nature Frame profiles now map explicitly to tablets/screens.
+Nature Frame profiles map explicitly to tablets/screens. Each profile has its
+own collection switches, Media Source folder, target aspect ratio and framing
+settings.
 
-The existing installation becomes the backwards-compatible **Default** profile.
-Add another Nature Frame integration entry for every screen that needs its own
-collection mix, for example:
-
-- **Køkken tablet**
-- **Stue**
-- **1. sal hub**
-
-Each profile gets its own Home Assistant device and its own collection switches.
-That makes it clear which switches control which screen.
-
-In Home Assistant Media the profiles appear under:
+In Home Assistant Media:
 
 **Nature Frame -> Screens / profiles -> <profile name> -> Portrait/Landscape**
 
-Point each Kiosk Satellite device at its own profile folder. Example:
+Point each Kiosk Satellite device at its own profile folder and keep
+**Fill the screen = Off** so Nature Frame controls the no-crop framing.
 
-`media-source://nature_frame/profile/kokken-tablet/landscape`
+### Selectable empty-area fill
 
-The old `active/portrait` and `active/landscape` paths remain compatible and
-resolve to the first/Default profile.
+Configure a Nature Frame profile from **Settings -> Devices & services ->
+Nature Frame -> Configure**.
+
+Available fill methods:
+
+- **Off** — black unused area; the artwork is still contained without cropping.
+- **Solid color** — one median color sampled from the nearest image edge.
+- **Edge stretch** — copies the nearest edge strip and stretches it outward.
+  Different colors along the edge remain different across the filled area.
+- **Edge stretch + blur** — same as Edge stretch with a configurable blur.
+- **Mirror** — mirrors the nearest edge strip into the unused area.
+
+Two tuning controls are available:
+
+- **Edge sample size**: 1–32 px. Use 1–2 px for a literal continuation of the
+  last pixel rows/columns; 6–10 px is smoother on textured artwork.
+- **Edge blur radius**: 0–30 px. Used by Edge stretch + blur.
+
+New profiles default to **Edge stretch + blur**, sample size **8 px**, blur
+**10 px**. Existing profiles without a saved fill setting retain the previous
+**Solid color** behavior until changed.
+
+Changing framing settings creates a different cache key automatically; replacing
+a local/private image at the same path also invalidates its framed cache via
+file size/mtime fingerprinting.
 
 ### Curated collections
 
@@ -44,8 +59,7 @@ resolve to the first/Default profile.
 - existing mammal and astronomy collections
 
 Multiple collections can be active in each screen profile independently. The
-playlist is balanced so each active collection contributes the same number of
-entries.
+playlist is balanced and duplicate source-image URLs are removed.
 
 ### Private collections
 
@@ -58,27 +72,11 @@ local to Home Assistant.
 
 Any additional first-level folder below
 `/media/nature-frame/private/` also becomes a private collection when it
-contains supported images.
+contains supported images. Private folders are rescanned automatically.
 
-### Framing / clipping
+### Poster cleanup
 
-Kiosk Satellite's current **Fill the screen = Smart** behavior can still crop
-poster-like images on the tested setup. Use **Fill the screen = Off** when the
-whole artwork must remain visible until the dedicated ambient/blurred no-crop
-renderer is implemented.
-
-
-### Solid framing
-
-For screen-profile playlists, Nature Frame 0.7.2 lazily creates a canvas that
-matches the profile's configured display ratio. The complete artwork is kept
-inside that canvas. Any unused top/bottom or side area is filled with a **solid
-color sampled from the nearest edge of the image**, rather than black.
-
-This is designed to be used with Kiosk Satellite:
-
-**Fill the screen = Off**
-
-Choose the screen's landscape aspect ratio in the Nature Frame profile options.
-Portrait playback automatically uses the inverted ratio. Generated images are
-cached under `/media/nature-frame/framed/`.
+Nature Frame trims large transparent export canvases and clearly uniform outer
+canvas before fitting the image. It does not intentionally remove a normal
+printed poster border. For archival/other use, keep your separately cleaned
+source files in the private library.
