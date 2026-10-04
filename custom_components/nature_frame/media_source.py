@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant
 
 from .catalog import NatureFrameCatalog, NatureImage
 from .const import DOMAIN
+from .framing import async_solid_framed_url
 from .profile import entry_profile_id, entry_profile_name
 from .selection import selected_gallery_keys
 
@@ -60,6 +61,18 @@ def _profile_thumbnail(
     return None
 
 
+def _find_image(
+    catalog: NatureFrameCatalog,
+    gallery_key: str,
+    orientation: str,
+    image_key: str,
+) -> NatureImage | None:
+    for image in catalog.images(gallery_key, orientation):
+        if image.key == image_key:
+            return image
+    return None
+
+
 async def async_get_media_source(hass: HomeAssistant) -> "NatureFrameMediaSource":
     return NatureFrameMediaSource(hass)
 
@@ -76,14 +89,39 @@ class NatureFrameMediaSource(MediaSource):
         catalog = _catalog(self.hass)
         await catalog.async_refresh()
         parts = [part for part in item.identifier.split("/") if part]
+
+        # Profile playlists use pre-framed images. The canvas matches the
+        # configured screen ratio and its otherwise-empty bars are filled with
+        # solid median colors sampled from the nearest image edge.
+        if len(parts) in {5, 6} and parts[0] == "profile-item":
+            _, profile_id, gallery_key, orientation, image_key = parts[:5]
+            entry = _profile_entry(self.hass, profile_id)
+            if entry is None:
+                raise Unresolvable("Unknown Nature Frame screen profile")
+            image = _find_image(catalog, gallery_key, orientation, image_key)
+            if image is None:
+                raise Unresolvable(f"Unknown Nature Frame item: {item.identifier}")
+            try:
+                framed_url = await async_solid_framed_url(
+                    self.hass,
+                    entry,
+                    image,
+                    orientation,
+                )
+                return PlayMedia(framed_url, "image/jpeg")
+            except Exception:
+                # Never break the slideshow because framing/caching failed.
+                return PlayMedia(image.url, image.mime_type)
+
         if len(parts) not in {4, 5} or parts[0] != "item":
             raise Unresolvable(
                 f"Could not resolve Nature Frame item: {item.identifier}"
             )
+
         _, gallery_key, orientation, image_key = parts[:4]
-        for image in catalog.images(gallery_key, orientation):
-            if image.key == image_key:
-                return PlayMedia(image.url, image.mime_type)
+        image = _find_image(catalog, gallery_key, orientation, image_key)
+        if image is not None:
+            return PlayMedia(image.url, image.mime_type)
         raise Unresolvable(f"Unknown Nature Frame item: {item.identifier}")
 
     @override
@@ -93,7 +131,9 @@ class NatureFrameMediaSource(MediaSource):
         identifier = item.identifier or ""
         profiles = _profile_entries(self.hass)
         first_profile = profiles[0] if profiles else None
-        root_thumb = _profile_thumbnail(first_profile, catalog) if first_profile else None
+        root_thumb = (
+            _profile_thumbnail(first_profile, catalog) if first_profile else None
+        )
 
         if not identifier:
             return BrowseMediaSource(
@@ -169,22 +209,37 @@ class NatureFrameMediaSource(MediaSource):
             return self._directory(
                 identifier,
                 f"{title} · {orientation.title()} · {len(selected)} active",
-                self._active_image_children(catalog, selected, orientation),
+                self._active_image_children(
+                    catalog,
+                    selected,
+                    orientation,
+                    profile_id,
+                ),
                 thumb,
             )
 
         # Backwards compatibility for tablets already pointed at active/*.
-        # It resolves to the first (normally migrated Default) profile.
+        # It resolves to the first (normally migrated Default) profile and now
+        # receives the same solid-color framing as named profiles.
         if identifier in {"active/portrait", "active/landscape"}:
             if first_profile is None:
                 raise BrowseError("No Nature Frame screen profiles configured")
             orientation = identifier.split("/", 1)[1]
             selected = _selected_for_entry(first_profile, catalog)
             thumb = _profile_thumbnail(first_profile, catalog)
+            first_profile_id = entry_profile_id(first_profile)
             return self._directory(
                 identifier,
-                f"{entry_profile_name(first_profile)} · {orientation.title()} · {len(selected)} active",
-                self._active_image_children(catalog, selected, orientation),
+                (
+                    f"{entry_profile_name(first_profile)} · "
+                    f"{orientation.title()} · {len(selected)} active"
+                ),
+                self._active_image_children(
+                    catalog,
+                    selected,
+                    orientation,
+                    first_profile_id,
+                ),
                 thumb,
             )
 
@@ -252,7 +307,10 @@ class NatureFrameMediaSource(MediaSource):
         raise BrowseError("Unknown Nature Frame item")
 
     def _folder(
-        self, identifier: str, title: str, thumbnail: str | None = None
+        self,
+        identifier: str,
+        title: str,
+        thumbnail: str | None = None,
     ) -> BrowseMediaSource:
         return BrowseMediaSource(
             domain=DOMAIN,
@@ -293,10 +351,19 @@ class NatureFrameMediaSource(MediaSource):
         image: NatureImage,
         title: str,
         slot: int | None = None,
+        profile_id: str | None = None,
     ) -> BrowseMediaSource:
-        identifier = f"item/{gallery_key}/{orientation}/{image.key}"
+        if profile_id:
+            identifier = (
+                f"profile-item/{profile_id}/{gallery_key}/"
+                f"{orientation}/{image.key}"
+            )
+        else:
+            identifier = f"item/{gallery_key}/{orientation}/{image.key}"
+
         if slot is not None:
             identifier += f"/{slot}"
+
         return BrowseMediaSource(
             domain=DOMAIN,
             identifier=identifier,
@@ -315,6 +382,7 @@ class NatureFrameMediaSource(MediaSource):
         orientation: str,
         *,
         prefix_title: bool = False,
+        profile_id: str | None = None,
     ) -> list[BrowseMediaSource]:
         gallery = catalog.gallery(gallery_key)
         title_prefix = f"{gallery.title} · " if prefix_title and gallery else ""
@@ -324,6 +392,7 @@ class NatureFrameMediaSource(MediaSource):
                 orientation,
                 image,
                 f"{title_prefix}{image.title}",
+                profile_id=profile_id,
             )
             for image in catalog.images(gallery_key, orientation)
         ]
@@ -349,6 +418,7 @@ class NatureFrameMediaSource(MediaSource):
         catalog: NatureFrameCatalog,
         gallery_keys: list[str],
         orientation: str,
+        profile_id: str,
     ) -> list[BrowseMediaSource]:
         available = [
             (key, catalog.gallery(key), catalog.images(key, orientation))
@@ -370,11 +440,15 @@ class NatureFrameMediaSource(MediaSource):
                 key,
                 orientation,
                 prefix_title=False,
+                profile_id=profile_id,
             )
 
         children: list[BrowseMediaSource] = []
         for key, gallery, images in available:
-            balanced = self._balanced_images(images, BALANCED_ITEMS_PER_COLLECTION)
+            balanced = self._balanced_images(
+                images,
+                BALANCED_ITEMS_PER_COLLECTION,
+            )
             for slot, image in enumerate(balanced):
                 children.append(
                     self._image_item(
@@ -383,6 +457,7 @@ class NatureFrameMediaSource(MediaSource):
                         image,
                         f"{gallery.title} · {image.title}",
                         slot,
+                        profile_id,
                     )
                 )
         return children
