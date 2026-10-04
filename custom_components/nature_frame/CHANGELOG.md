@@ -1,5 +1,15 @@
 # Nature Frame changelog
 
+## 0.7.4
+
+- Gives virtual collections such as Kitchen · Mixed and Art · Misc their own
+  representative cover image instead of reusing the first source collection's
+  thumbnail.
+- Deduplicates active playlists by image URL when a virtual collection and one
+  of its source collections are enabled together.
+- Keeps public fallback catalogues, per-screen profiles, Lovelace thumbnails
+  and solid edge-color framing.
+
 ## 0.7.3
 
 - Adds built-in fallback catalogues for Zoo · Public · Swainson and the three
