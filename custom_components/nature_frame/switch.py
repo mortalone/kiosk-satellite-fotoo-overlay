@@ -8,6 +8,7 @@ from homeassistant.helpers.entity import DeviceInfo
 
 from .catalog import NatureFrameCatalog
 from .const import DOMAIN
+from .profile import entry_profile_id, entry_profile_name
 from .selection import async_update_gallery_selection, selected_gallery_keys
 
 
@@ -39,14 +40,28 @@ class NatureFrameGallerySwitch(SwitchEntity):
         self.entry = entry
         self.catalog = catalog
         self.gallery_key = gallery_key
+
+        profile_id = entry_profile_id(entry)
+        profile_name = entry_profile_name(entry)
         gallery = catalog.gallery(gallery_key)
+
         self._attr_name = gallery.title if gallery else gallery_key
-        self._attr_unique_id = f"nature_frame_gallery_{gallery_key}"
+        # Keep existing IDs stable for the migrated Default profile.
+        self._attr_unique_id = (
+            f"nature_frame_gallery_{gallery_key}"
+            if profile_id == "default"
+            else f"nature_frame_{profile_id}_gallery_{gallery_key}"
+        )
+        device_identifier = (
+            (DOMAIN, DOMAIN)
+            if profile_id == "default"
+            else (DOMAIN, f"profile_{profile_id}")
+        )
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, DOMAIN)},
-            name="Nature Frame",
+            identifiers={device_identifier},
+            name=f"Nature Frame · {profile_name}",
             manufacturer="Nature Frame",
-            model="Streaming media gallery",
+            model="Screen collection profile",
         )
 
     @property
