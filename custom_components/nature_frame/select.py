@@ -7,6 +7,7 @@ from homeassistant.helpers.entity import DeviceInfo
 
 from .catalog import NatureFrameCatalog
 from .const import DOMAIN
+from .selection import async_update_gallery_selection, selected_gallery_keys
 
 
 async def async_setup_entry(
@@ -20,7 +21,7 @@ async def async_setup_entry(
 
 class NatureFrameGallerySelect(SelectEntity):
     _attr_has_entity_name = True
-    _attr_name = "Gallery"
+    _attr_name = "Single gallery"
     _attr_icon = "mdi:image-multiple"
     _attr_unique_id = "nature_frame_gallery"
 
@@ -46,16 +47,13 @@ class NatureFrameGallerySelect(SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        selected = self.entry.options.get("gallery")
-        if selected in self.options:
-            return selected
-        return self.options[0] if self.options else None
+        selected = selected_gallery_keys(self.entry, self.options)
+        return selected[0] if selected else None
 
     async def async_select_option(self, option: str) -> None:
         if option not in self.options:
             raise ValueError(f"Unsupported gallery: {option}")
-        self.hass.config_entries.async_update_entry(
-            self.entry,
-            options={**self.entry.options, "gallery": option},
-        )
+        # Compatibility helper: selecting here intentionally returns Nature
+        # Frame to a single active collection. For multi-select use switches.
+        async_update_gallery_selection(self.hass, self.entry, [option])
         self.async_write_ha_state()
