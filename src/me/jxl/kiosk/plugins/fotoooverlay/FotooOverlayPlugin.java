@@ -251,6 +251,19 @@ public final class FotooOverlayPlugin implements KioskPlugin {
             main.post(this::updatePresentation);
         } else if ("test".equals(command)) {
             main.post(this::showTestOverlay);
+        } else if ("showCameraTest".equals(command)) {
+            cameraTestMode = true;
+            main.post(() -> {
+                if (overlayActive()) showDoorbell(true);
+                updatePresentation();
+            });
+        } else if ("hideCameraTest".equals(command)) {
+            cameraTestMode = false;
+            doorbellHeldByTest = false;
+            main.post(() -> {
+                hideDoorbell();
+                updatePresentation();
+            });
         } else if ("hide".equals(command)) {
             main.post(() -> {
                 forceOverlayPreview = false;
@@ -509,11 +522,17 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         cameraHeightPercent = camHeight instanceof Number ? Math.max(20, Math.min(90, ((Number) camHeight).intValue())) : 55;
         String camPosition = stringSetting(values, "cameraPosition");
         cameraPosition = "Top".equals(camPosition) || "Bottom".equals(camPosition) ? camPosition : "Center";
-        cameraTestMode = Boolean.TRUE.equals(values.get("cameraTestMode"));
-        showOnKioskScreensaver = values.get("showOnKioskScreensaver") == null
-                || Boolean.TRUE.equals(values.get("showOnKioskScreensaver"));
-        showOnFotoo = values.get("showOnFotoo") == null
-                || Boolean.TRUE.equals(values.get("showOnFotoo"));
+        String overlayTarget = stringSetting(values, "overlayTarget");
+        if ("Kiosk Satellite only".equals(overlayTarget)) {
+            showOnKioskScreensaver = true;
+            showOnFotoo = false;
+        } else if ("Fotoo only".equals(overlayTarget)) {
+            showOnKioskScreensaver = false;
+            showOnFotoo = true;
+        } else {
+            showOnKioskScreensaver = true;
+            showOnFotoo = true;
+        }
 
         doorbellInitialSeen = false;
         lastDoorbellState = null;
@@ -1294,7 +1313,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
         test.setTag("fotoo-overlay:test");
-        test.setText("Screensaver Overlay 0.10.1 test");
+        test.setText("Screensaver Overlay 0.10.2 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(
