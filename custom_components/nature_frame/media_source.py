@@ -12,9 +12,11 @@ from homeassistant.components.media_source import (
 )
 from homeassistant.core import HomeAssistant
 
-from .catalog import NatureFrameCatalog
+from .catalog import NatureFrameCatalog, NatureImage
 from .const import DOMAIN
 from .selection import selected_gallery_keys
+
+BALANCED_ITEMS_PER_COLLECTION = 80
 
 
 def _catalog(hass: HomeAssistant) -> NatureFrameCatalog:
@@ -50,11 +52,11 @@ class NatureFrameMediaSource(MediaSource):
         catalog = _catalog(self.hass)
         await catalog.async_refresh()
         parts = [part for part in item.identifier.split("/") if part]
-        if len(parts) != 4 or parts[0] != "item":
+        if len(parts) not in {4, 5} or parts[0] != "item":
             raise Unresolvable(
                 f"Could not resolve Nature Frame item: {item.identifier}"
             )
-        _, gallery_key, orientation, image_key = parts
+        _, gallery_key, orientation, image_key = parts[:4]
         for image in catalog.images(gallery_key, orientation):
             if image.key == image_key:
                 return PlayMedia(image.url, image.mime_type)
@@ -93,9 +95,8 @@ class NatureFrameMediaSource(MediaSource):
                     active_thumb,
                 ),
                 self._folder("galleries", "All collections"),
+                self._folder("private", "Private collections"),
             ]
-            if any(gallery.is_private for gallery in catalog.galleries.values()):
-                children.append(self._folder("private", "Private collections"))
             return BrowseMediaSource(
                 domain=DOMAIN,
                 identifier=None,
@@ -217,6 +218,28 @@ class NatureFrameMediaSource(MediaSource):
             thumbnail=thumbnail,
         )
 
+    def _image_item(
+        self,
+        gallery_key: str,
+        orientation: str,
+        image: NatureImage,
+        title: str,
+        slot: int | None = None,
+    ) -> BrowseMediaSource:
+        identifier = f"item/{gallery_key}/{orientation}/{image.key}"
+        if slot is not None:
+            identifier += f"/{slot}"
+        return BrowseMediaSource(
+            domain=DOMAIN,
+            identifier=identifier,
+            media_class=MediaClass.IMAGE,
+            media_content_type=image.mime_type,
+            title=title,
+            can_play=True,
+            can_expand=False,
+            thumbnail=image.thumbnail or image.url,
+        )
+
     def _image_children(
         self,
         catalog: NatureFrameCatalog,
@@ -228,18 +251,30 @@ class NatureFrameMediaSource(MediaSource):
         gallery = catalog.gallery(gallery_key)
         title_prefix = f"{gallery.title} · " if prefix_title and gallery else ""
         return [
-            BrowseMediaSource(
-                domain=DOMAIN,
-                identifier=f"item/{gallery_key}/{orientation}/{image.key}",
-                media_class=MediaClass.IMAGE,
-                media_content_type=image.mime_type,
-                title=f"{title_prefix}{image.title}",
-                can_play=True,
-                can_expand=False,
-                thumbnail=image.thumbnail or image.url,
+            self._image_item(
+                gallery_key,
+                orientation,
+                image,
+                f"{title_prefix}{image.title}",
             )
             for image in catalog.images(gallery_key, orientation)
         ]
+
+    def _balanced_images(
+        self,
+        images: tuple[NatureImage, ...],
+        target: int,
+    ) -> list[NatureImage]:
+        if not images:
+            return []
+        if len(images) == target:
+            return list(images)
+        if len(images) > target:
+            return [
+                images[min(len(images) - 1, (index * len(images)) // target)]
+                for index in range(target)
+            ]
+        return [images[index % len(images)] for index in range(target)]
 
     def _active_image_children(
         self,
@@ -247,15 +282,39 @@ class NatureFrameMediaSource(MediaSource):
         gallery_keys: list[str],
         orientation: str,
     ) -> list[BrowseMediaSource]:
-        prefix_title = len(gallery_keys) > 1
-        children: list[BrowseMediaSource] = []
-        for key in gallery_keys:
-            children.extend(
-                self._image_children(
-                    catalog,
-                    key,
-                    orientation,
-                    prefix_title=prefix_title,
-                )
+        available = [
+            (key, catalog.gallery(key), catalog.images(key, orientation))
+            for key in gallery_keys
+            if catalog.gallery(key) is not None
+        ]
+        available = [
+            (key, gallery, images)
+            for key, gallery, images in available
+            if gallery is not None and images
+        ]
+        if not available:
+            return []
+
+        if len(available) == 1:
+            key, gallery, _ = available[0]
+            return self._image_children(
+                catalog,
+                key,
+                orientation,
+                prefix_title=False,
             )
+
+        children: list[BrowseMediaSource] = []
+        for key, gallery, images in available:
+            balanced = self._balanced_images(images, BALANCED_ITEMS_PER_COLLECTION)
+            for slot, image in enumerate(balanced):
+                children.append(
+                    self._image_item(
+                        key,
+                        orientation,
+                        image,
+                        f"{gallery.title} · {image.title}",
+                        slot,
+                    )
+                )
         return children
