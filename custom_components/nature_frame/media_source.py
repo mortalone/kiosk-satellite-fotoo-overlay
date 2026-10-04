@@ -10,10 +10,12 @@ from homeassistant.components.media_source import (
     PlayMedia,
     Unresolvable,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .catalog import NatureFrameCatalog, NatureImage
 from .const import DOMAIN
+from .profile import entry_profile_id, entry_profile_name
 from .selection import selected_gallery_keys
 
 BALANCED_ITEMS_PER_COLLECTION = 80
@@ -26,14 +28,36 @@ def _catalog(hass: HomeAssistant) -> NatureFrameCatalog:
     return next(iter(entries.values()))
 
 
-def _selected_galleries(
-    hass: HomeAssistant,
+def _profile_entries(hass: HomeAssistant) -> list[ConfigEntry]:
+    return hass.config_entries.async_entries(DOMAIN)
+
+
+def _profile_entry(hass: HomeAssistant, profile_id: str) -> ConfigEntry | None:
+    entries = _profile_entries(hass)
+    for entry in entries:
+        if entry_profile_id(entry) == profile_id:
+            return entry
+    if profile_id == "default" and entries:
+        return entries[0]
+    return None
+
+
+def _selected_for_entry(
+    entry: ConfigEntry,
     catalog: NatureFrameCatalog,
 ) -> list[str]:
-    entries = hass.config_entries.async_entries(DOMAIN)
-    if not entries:
-        return catalog.gallery_keys()[:1]
-    return selected_gallery_keys(entries[0], catalog.gallery_keys())
+    return selected_gallery_keys(entry, catalog.gallery_keys())
+
+
+def _profile_thumbnail(
+    entry: ConfigEntry,
+    catalog: NatureFrameCatalog,
+) -> str | None:
+    for key in _selected_for_entry(entry, catalog):
+        gallery = catalog.gallery(key)
+        if gallery and gallery.thumbnail:
+            return gallery.thumbnail
+    return None
 
 
 async def async_get_media_source(hass: HomeAssistant) -> "NatureFrameMediaSource":
@@ -67,36 +91,11 @@ class NatureFrameMediaSource(MediaSource):
         catalog = _catalog(self.hass)
         await catalog.async_refresh()
         identifier = item.identifier or ""
-        selected = _selected_galleries(self.hass, catalog)
-        selected_galleries = [
-            gallery
-            for key in selected
-            if (gallery := catalog.gallery(key)) is not None
-        ]
-        active_thumb = next(
-            (
-                gallery.thumbnail
-                for gallery in selected_galleries
-                if gallery.thumbnail is not None
-            ),
-            None,
-        )
+        profiles = _profile_entries(self.hass)
+        first_profile = profiles[0] if profiles else None
+        root_thumb = _profile_thumbnail(first_profile, catalog) if first_profile else None
 
         if not identifier:
-            children = [
-                self._folder(
-                    "active/portrait",
-                    f"Active collections ({len(selected)}) · Portrait",
-                    active_thumb,
-                ),
-                self._folder(
-                    "active/landscape",
-                    f"Active collections ({len(selected)}) · Landscape",
-                    active_thumb,
-                ),
-                self._folder("galleries", "All collections"),
-                self._folder("private", "Private collections"),
-            ]
             return BrowseMediaSource(
                 domain=DOMAIN,
                 identifier=None,
@@ -106,8 +105,87 @@ class NatureFrameMediaSource(MediaSource):
                 can_play=False,
                 can_expand=True,
                 children_media_class=MediaClass.DIRECTORY,
-                thumbnail=active_thumb,
-                children=children,
+                thumbnail=root_thumb,
+                children=[
+                    self._folder("profiles", "Screens / profiles", root_thumb),
+                    self._folder("galleries", "All collections"),
+                    self._folder("private", "Private collections"),
+                ],
+            )
+
+        if identifier == "profiles":
+            children = [
+                self._folder(
+                    f"profile/{entry_profile_id(entry)}",
+                    entry_profile_name(entry),
+                    _profile_thumbnail(entry, catalog),
+                )
+                for entry in profiles
+            ]
+            return self._directory(
+                identifier,
+                "Screens / profiles",
+                children,
+                root_thumb,
+            )
+
+        if identifier.startswith("profile/") and identifier.count("/") == 1:
+            profile_id = identifier.split("/", 1)[1]
+            entry = _profile_entry(self.hass, profile_id)
+            if entry is None:
+                raise BrowseError("Unknown Nature Frame screen profile")
+            selected = _selected_for_entry(entry, catalog)
+            thumb = _profile_thumbnail(entry, catalog)
+            title = entry_profile_name(entry)
+            return self._directory(
+                identifier,
+                title,
+                [
+                    self._folder(
+                        f"profile/{profile_id}/portrait",
+                        f"Portrait · {len(selected)} active",
+                        thumb,
+                    ),
+                    self._folder(
+                        f"profile/{profile_id}/landscape",
+                        f"Landscape · {len(selected)} active",
+                        thumb,
+                    ),
+                ],
+                thumb,
+            )
+
+        parts = identifier.split("/")
+        if len(parts) == 3 and parts[0] == "profile":
+            _, profile_id, orientation = parts
+            if orientation not in {"portrait", "landscape"}:
+                raise BrowseError("Unknown orientation")
+            entry = _profile_entry(self.hass, profile_id)
+            if entry is None:
+                raise BrowseError("Unknown Nature Frame screen profile")
+            selected = _selected_for_entry(entry, catalog)
+            thumb = _profile_thumbnail(entry, catalog)
+            title = entry_profile_name(entry)
+            return self._directory(
+                identifier,
+                f"{title} · {orientation.title()} · {len(selected)} active",
+                self._active_image_children(catalog, selected, orientation),
+                thumb,
+            )
+
+        # Backwards compatibility for tablets already pointed at active/*.
+        # It resolves to the first (normally migrated Default) profile.
+        if identifier in {"active/portrait", "active/landscape"}:
+            if first_profile is None:
+                raise BrowseError("No Nature Frame screen profiles configured")
+            orientation = identifier.split("/", 1)[1]
+            selected = _selected_for_entry(first_profile, catalog)
+            thumb = _profile_thumbnail(first_profile, catalog)
+            return self._directory(
+                identifier,
+                f"{entry_profile_name(first_profile)} · {orientation.title()} · {len(selected)} active",
+                self._active_image_children(catalog, selected, orientation),
+                thumb,
             )
 
         if identifier in {"galleries", "private"}:
@@ -157,16 +235,6 @@ class NatureFrameMediaSource(MediaSource):
                 gallery.thumbnail,
             )
 
-        if identifier in {"active/portrait", "active/landscape"}:
-            orientation = identifier.split("/", 1)[1]
-            return self._directory(
-                identifier,
-                f"Active collections ({len(selected)}) · {orientation.title()}",
-                self._active_image_children(catalog, selected, orientation),
-                active_thumb,
-            )
-
-        parts = identifier.split("/")
         if len(parts) == 3 and parts[0] == "gallery":
             _, key, orientation = parts
             if orientation not in {"portrait", "landscape"}:
@@ -296,7 +364,7 @@ class NatureFrameMediaSource(MediaSource):
             return []
 
         if len(available) == 1:
-            key, gallery, _ = available[0]
+            key, _, _ = available[0]
             return self._image_children(
                 catalog,
                 key,
