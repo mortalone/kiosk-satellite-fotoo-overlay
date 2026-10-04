@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from PIL import Image, ImageOps
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -24,6 +26,7 @@ INKY_PATH_RE = re.compile(
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 COMMONS_THUMB_WIDTH = 1200
 PRIVATE_MEDIA_ROOT = Path("/media/nature-frame/private")
+PRIVATE_PREVIEW_ROOT = Path("/media/nature-frame/previews/private")
 LOCAL_MEDIA_ROOT = Path("/media")
 PRIVATE_MEDIA_URL_ROOT = "/media/local"
 SUPPORTED_PRIVATE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -285,7 +288,7 @@ class NatureFrameCatalog:
         session = async_get_clientsession(self.hass)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "HomeAssistant-NatureFrame/0.7.5",
+            "User-Agent": "HomeAssistant-NatureFrame/0.8.1",
         }
         async with session.get(
             url, params=params, headers=headers, timeout=30
@@ -554,6 +557,79 @@ class NatureFrameCatalog:
             cover_thumbnail=cover_thumbnail,
         )
 
+    def _private_cover_thumbnail(
+        self,
+        source_path: Path,
+        gallery_key: str,
+    ) -> str | None:
+        """Create a stable browser-safe JPEG cover for a private collection."""
+        try:
+            relative = source_path.relative_to(LOCAL_MEDIA_ROOT)
+            stat = source_path.stat()
+            fingerprint = hashlib.sha1(
+                (
+                    f"{relative.as_posix()}|{stat.st_size}|"
+                    f"{stat.st_mtime_ns}"
+                ).encode("utf-8")
+            ).hexdigest()[:16]
+
+            PRIVATE_PREVIEW_ROOT.mkdir(parents=True, exist_ok=True)
+            destination = (
+                PRIVATE_PREVIEW_ROOT
+                / f"{gallery_key}-{fingerprint}.jpg"
+            )
+
+            if not destination.is_file():
+                with Image.open(source_path) as opened:
+                    image = ImageOps.exif_transpose(opened)
+
+                    if image.mode in {"RGBA", "LA"} or (
+                        image.mode == "P"
+                        and "transparency" in image.info
+                    ):
+                        rgba = image.convert("RGBA")
+                        base = Image.new(
+                            "RGBA",
+                            rgba.size,
+                            (255, 255, 255, 255),
+                        )
+                        base.alpha_composite(rgba)
+                        image = base.convert("RGB")
+                    else:
+                        image = image.convert("RGB")
+
+                    image.thumbnail(
+                        (900, 900),
+                        Image.Resampling.LANCZOS,
+                    )
+                    image.save(
+                        destination,
+                        format="JPEG",
+                        quality=88,
+                        optimize=True,
+                    )
+
+                # Keep only the current cover for this collection.
+                for old in PRIVATE_PREVIEW_ROOT.glob(
+                    f"{gallery_key}-*.jpg"
+                ):
+                    if old != destination:
+                        try:
+                            old.unlink()
+                        except OSError:
+                            pass
+
+            relative_preview = destination.relative_to(
+                LOCAL_MEDIA_ROOT
+            ).as_posix()
+            return (
+                f"{PRIVATE_MEDIA_URL_ROOT}/"
+                f"{quote(relative_preview, safe='/')}"
+            )
+        except Exception:
+            # A failed preview must never hide/break the private collection.
+            return None
+
     def _load_private_galleries(self) -> dict[str, NatureGallery]:
         PRIVATE_MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -569,6 +645,7 @@ class NatureFrameCatalog:
             key=lambda path: path.name.casefold(),
         ):
             images: list[NatureImage] = []
+            first_source_path: Path | None = None
             for path in sorted(
                 (
                     item
@@ -602,6 +679,8 @@ class NatureFrameCatalog:
                         license="Private/local",
                     )
                 )
+                if first_source_path is None:
+                    first_source_path = path
 
             seeded = SEEDED_PRIVATE_COLLECTIONS.get(folder.name.casefold())
             if seeded:
@@ -621,6 +700,16 @@ class NatureFrameCatalog:
                     ).hexdigest()[:6]
                     key = f"{key}-{suffix}"
 
+            # Use a generated, simple local JPEG as the collection cover.
+            # Home Assistant frontend cards can be less reliable when an
+            # entity_picture points directly at a private source filename with
+            # spaces, Unicode, transparency or a recently replaced file.
+            cover_thumbnail = (
+                self._private_cover_thumbnail(first_source_path, key)
+                if first_source_path is not None
+                else None
+            )
+
             # Private images are exposed in both orientation folders. That
             # guarantees posters remain available regardless of tablet rotation.
             image_tuple = tuple(images)
@@ -631,6 +720,7 @@ class NatureFrameCatalog:
                 portrait=image_tuple,
                 landscape=image_tuple,
                 is_private=True,
+                cover_thumbnail=cover_thumbnail,
             )
 
         return galleries
