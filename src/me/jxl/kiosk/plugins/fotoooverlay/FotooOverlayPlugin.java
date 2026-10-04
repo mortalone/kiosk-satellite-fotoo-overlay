@@ -94,7 +94,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private boolean showNextTrack = false;
     private int doorbellSeconds = 20;
     private int cameraOpacity = 100;
-    private int cameraWidthPercent = 92;
+    private int cameraWidthPercent = 90;
     private int cameraHeightPercent = 55;
     private String cameraPosition = "Center";
     private boolean cameraTestMode = false;
@@ -447,7 +447,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         Object camOpacity = values.get("cameraOpacity");
         cameraOpacity = camOpacity instanceof Number ? Math.max(10, Math.min(100, ((Number) camOpacity).intValue())) : 100;
         Object camWidth = values.get("cameraWidthPercent");
-        cameraWidthPercent = camWidth instanceof Number ? Math.max(30, Math.min(100, ((Number) camWidth).intValue())) : 92;
+        cameraWidthPercent = camWidth instanceof Number ? Math.max(30, Math.min(100, ((Number) camWidth).intValue())) : 90;
         Object camHeight = values.get("cameraHeightPercent");
         cameraHeightPercent = camHeight instanceof Number ? Math.max(20, Math.min(90, ((Number) camHeight).intValue())) : 55;
         String camPosition = stringSetting(values, "cameraPosition");
@@ -1155,7 +1155,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private void showTestOverlay() {
         if (context == null || windowManager == null) return;
         TextView test = textView(18, true, Color.WHITE);
-        test.setText("Fotoo Overlay 0.8.1 test");
+        test.setText("Fotoo Overlay 0.8.2 test");
         test.setPadding(dp(18), dp(16), dp(18), dp(16));
         test.setBackground(cardBackground(0xE6212226, 18));
         WindowManager.LayoutParams params = overlayParams(

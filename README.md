@@ -2,7 +2,7 @@
 
 Native Android system overlays above Fotoo while Fotoo runs as the Android screensaver.
 
-## 0.8.1
+## 0.8.2
 
 - Now Playing uses Kiosk Satellite's existing Music Assistant configuration directly when the selected KS player source is Music Assistant.
 - The plugin polls Music Assistant's active queue directly, so automatic next-track transitions do not depend on the Home Assistant media_player updating correctly.
@@ -13,6 +13,7 @@ Native Android system overlays above Fotoo while Fotoo runs as the Android scree
 - Two independent doorbell triggers can show the same camera.
 - Camera 100% uses a genuinely opaque Android window plus an RGB-only bitmap, so Fotoo cannot blend through the camera rectangle.
 - Camera width, height and vertical position are adjustable.
+- Camera width default is 90%, aligned to Kiosk Satellite's 5% numeric step validation.
 - Separate opacity controls for Now Playing and the camera.
 - Persistent camera test mode remains available. **Attach / show overlays now** is now a plugin action instead of a setting, keeping the manifest within Kiosk Satellite's 20-setting SDK limit.
 
