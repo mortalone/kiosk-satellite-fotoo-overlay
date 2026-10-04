@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 
 from .catalog import NatureFrameCatalog, NatureImage
 from .const import DOMAIN
-from .framing import async_solid_framed_url
+from .framing import async_framed_url
 from .profile import entry_profile_id, entry_profile_name
 from .selection import selected_gallery_keys
 
@@ -91,8 +91,9 @@ class NatureFrameMediaSource(MediaSource):
         parts = [part for part in item.identifier.split("/") if part]
 
         # Profile playlists use pre-framed images. The canvas matches the
-        # configured screen ratio and its otherwise-empty bars are filled with
-        # solid median colors sampled from the nearest image edge.
+        # configured screen ratio and each profile chooses how unused space is
+        # filled: black/off, solid edge color, stretched edge, blurred edge,
+        # or mirrored edge content.
         if len(parts) in {5, 6} and parts[0] == "profile-item":
             _, profile_id, gallery_key, orientation, image_key = parts[:5]
             entry = _profile_entry(self.hass, profile_id)
@@ -102,7 +103,7 @@ class NatureFrameMediaSource(MediaSource):
             if image is None:
                 raise Unresolvable(f"Unknown Nature Frame item: {item.identifier}")
             try:
-                framed_url = await async_solid_framed_url(
+                framed_url = await async_framed_url(
                     self.hass,
                     entry,
                     image,
@@ -220,7 +221,7 @@ class NatureFrameMediaSource(MediaSource):
 
         # Backwards compatibility for tablets already pointed at active/*.
         # It resolves to the first (normally migrated Default) profile and now
-        # receives the same solid-color framing as named profiles.
+        # receives the same profile framing as named profiles.
         if identifier in {"active/portrait", "active/landscape"}:
             if first_profile is None:
                 raise BrowseError("No Nature Frame screen profiles configured")
