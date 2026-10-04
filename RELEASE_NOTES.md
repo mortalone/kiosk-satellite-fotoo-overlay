@@ -1,14 +1,29 @@
-## Screensaver Overlay 0.11.3
+## Screensaver Overlay 0.11.4
 
-Doorbell camera sizing is simplified.
+### Kiosk Satellite screensavers without Legacy WebView
 
-Instead of separate width and height controls there is now one **Camera size**
-slider from 30–100%. It controls the width of the overlay; as soon as a camera
-frame arrives, the overlay calculates its height from the frame's real aspect
-ratio. The image uses FIT_CENTER, so it is no longer forced into an arbitrary
-rectangle that could crop the feed.
+Kiosk Satellite's own screensavers now use a different overlay path from
+external Fotoo.
 
-Now Playing reliability/layout changes from 0.11.2 remain unchanged.
+When Kiosk Satellite owns the foreground Activity, Now Playing, the doorbell
+camera and the test overlay are attached directly above the kiosk content.
+This avoids the hybrid-composition WebView layer that could cover Android
+`TYPE_APPLICATION_OVERLAY` windows on Raspberry Pi hardware.
+
+Fotoo remains unchanged and continues to use the Android system-overlay path.
+
+After installing 0.11.4, **Legacy WebView renderer can be turned back OFF** for
+testing. Restart Kiosk Satellite once after changing that renderer setting.
+
+### Stable cover art
+
+Now Playing artwork no longer clears while a new image is loading. Home
+Assistant's selected media_player artwork is preferred over Music Assistant
+queue artwork, transient signed-token changes are ignored for image identity,
+and decoded covers are kept in a small memory cache.
+
+Brief metadata gaps during track changes keep the old cover for 2.5 seconds
+instead of flashing an empty square.
 
 ## Nature Frame
 
