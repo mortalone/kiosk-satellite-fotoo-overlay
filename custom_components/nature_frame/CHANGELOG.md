@@ -1,5 +1,15 @@
 # Nature Frame changelog
 
+## 0.7.6
+
+- Fixes private PNG posters becoming tiny after background removal.
+- Transparent outer canvas/padding is cropped before Nature Frame scales and
+  frames the artwork.
+- Preserves the visible poster itself and its border; only transparent padding
+  outside the visible artwork is removed.
+- Bumps the framing cache key so existing cached images are regenerated
+  automatically.
+
 ## 0.7.5
 
 - Fixes private collections not appearing in the Lovelace selector after images
