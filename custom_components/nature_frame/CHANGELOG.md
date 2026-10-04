@@ -2,6 +2,16 @@
 
 ## 0.7.6
 
+- Automatically trims transparent outer padding before fitting private artwork.
+- Also detects and trims large opaque, near-uniform export canvases such as
+  white margins added by background-removal or upscaling tools.
+- The poster itself is then scaled to fill the available screen on one axis
+  while preserving its full aspect ratio.
+- Bumps framed-image cache generation so existing small cached renders are not
+  reused.
+
+## 0.7.6
+
 - Fixes private PNG posters becoming tiny after background removal.
 - Transparent outer canvas/padding is cropped before Nature Frame scales and
   frames the artwork.
