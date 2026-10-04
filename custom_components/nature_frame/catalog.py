@@ -17,6 +17,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 INKY_REPO = "veteranbv/inky-bird-frame"
 INKY_BRANCH = "main"
 REFRESH_SECONDS = 6 * 60 * 60
+PRIVATE_REFRESH_SECONDS = 10
 INKY_PATH_RE = re.compile(
     r"^catalog/species/(?P<species>[^/]+)/(?P<variant>portrait|display)\.png$"
 )
@@ -207,7 +208,9 @@ class NatureFrameCatalog:
         self.hass = hass
         self.galleries: dict[str, NatureGallery] = {}
         self._remote_galleries: dict[str, NatureGallery] = {}
+        self._private_galleries: dict[str, NatureGallery] = {}
         self._last_refresh = 0.0
+        self._last_private_refresh = 0.0
         self._lock = asyncio.Lock()
 
     async def async_refresh(self, force: bool = False) -> None:
@@ -257,10 +260,21 @@ class NatureFrameCatalog:
                 elif not self._remote_galleries:
                     raise RuntimeError("Nature Frame could not load any remote galleries")
 
-            private = await self.hass.async_add_executor_job(
-                self._load_private_galleries
+            refresh_private = (
+                force
+                or not self._private_galleries
+                or now - self._last_private_refresh >= PRIVATE_REFRESH_SECONDS
             )
-            self.galleries = {**self._remote_galleries, **private}
+            if refresh_private:
+                self._private_galleries = await self.hass.async_add_executor_job(
+                    self._load_private_galleries
+                )
+                self._last_private_refresh = time.monotonic()
+
+            self.galleries = {
+                **self._remote_galleries,
+                **self._private_galleries,
+            }
 
             if not self.galleries:
                 raise RuntimeError("Nature Frame could not load any galleries")
@@ -271,7 +285,7 @@ class NatureFrameCatalog:
         session = async_get_clientsession(self.hass)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "HomeAssistant-NatureFrame/0.7.4",
+            "User-Agent": "HomeAssistant-NatureFrame/0.7.5",
         }
         async with session.get(
             url, params=params, headers=headers, timeout=30
