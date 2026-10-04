@@ -444,12 +444,19 @@ class NatureFrameMediaSource(MediaSource):
             )
 
         children: list[BrowseMediaSource] = []
+        seen_urls: set[str] = set()
         for key, gallery, images in available:
             balanced = self._balanced_images(
                 images,
                 BALANCED_ITEMS_PER_COLLECTION,
             )
             for slot, image in enumerate(balanced):
+                # Virtual collections intentionally reuse source-library images.
+                # If both a virtual collection and one of its source collections
+                # are enabled, keep only one copy in the active playlist.
+                if image.url in seen_urls:
+                    continue
+                seen_urls.add(image.url)
                 children.append(
                     self._image_item(
                         key,
