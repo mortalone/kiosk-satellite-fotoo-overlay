@@ -1,18 +1,18 @@
-## Screensaver Overlay 0.10.9
+## Screensaver Overlay 0.10.10
 
 Packaging release. Overlay behavior is unchanged.
 
-## Nature Frame 0.7.5
+## Nature Frame 0.7.6
 
-This fixes private collections such as **Zoo · Private** not appearing in the
-Lovelace gallery selector after files are added.
+This fixes PhotoRoom/background-remover PNG files appearing much smaller than
+the screen.
 
-Nature Frame now rescans private collection folders automatically and the switch
-entities expose live `entity_picture` and `image_count` values instead of
-keeping the values from Home Assistant startup.
+Those tools often make the outer background transparent without reducing the
+actual canvas size. Nature Frame previously scaled the entire transparent
+canvas, so the poster itself could occupy only the middle of the display.
 
-There is no collection-count limit involved.
+Nature Frame now trims only transparent outer padding first, then scales the
+visible artwork as large as possible while preserving the full poster.
 
-After updating, adding images to an existing private collection should make it
-appear automatically in an Auto-Entities selector that filters on
-`image_count > 0`.
+The framing cache version is also bumped, so old framed copies are regenerated
+automatically after the update.
