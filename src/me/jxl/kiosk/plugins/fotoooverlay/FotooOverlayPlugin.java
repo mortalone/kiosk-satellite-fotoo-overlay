@@ -1423,8 +1423,7 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     }
 
     private void applyCameraAspectRatio(int sourceWidth, int sourceHeight) {
-        if (doorbellView == null || windowManager == null ||
-                sourceWidth <= 0 || sourceHeight <= 0) return;
+        if (doorbellView == null || sourceWidth <= 0 || sourceHeight <= 0) return;
 
         int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
         int screenHeight = context.getResources().getDisplayMetrics().heightPixels;
@@ -1439,12 +1438,20 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         }
 
         try {
-            WindowManager.LayoutParams params =
-                    (WindowManager.LayoutParams) doorbellView.getLayoutParams();
-            if (params.width == width && params.height == height) return;
+            ViewGroup.LayoutParams params = doorbellView.getLayoutParams();
+            if (params == null || (params.width == width && params.height == height)) return;
             params.width = width;
             params.height = height;
-            windowManager.updateViewLayout(doorbellView, params);
+
+            ViewParent parent = doorbellView.getParent();
+            if (parent instanceof ViewGroup) {
+                doorbellView.setLayoutParams(params);
+                ((ViewGroup) parent).requestLayout();
+            } else if (params instanceof WindowManager.LayoutParams && windowManager != null) {
+                windowManager.updateViewLayout(doorbellView, params);
+            } else {
+                doorbellView.setLayoutParams(params);
+            }
         } catch (Throwable ignored) {
             // A refresh frame may land while the overlay is closing.
         }
@@ -1491,10 +1498,10 @@ public final class FotooOverlayPlugin implements KioskPlugin {
         mediaProgress = null;
         mediaTime = null;
         mediaFetchPending = false;
-        renderedMediaPicture = null;
-        if (view != null && windowManager != null) {
-            try { windowManager.removeViewImmediate(view); } catch (Throwable ignored) {}
-        }
+        renderedMediaPicture = "";
+        renderedMediaPictureKey = "";
+        main.removeCallbacks(clearMediaImageTask);
+        removeOverlayView(view);
     }
 
     private void showTestOverlay() {
@@ -1718,6 +1725,58 @@ public final class FotooOverlayPlugin implements KioskPlugin {
     private static String safeMessage(Throwable error) {
         String message = error.getMessage();
         return error.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+    }
+
+    private Activity findResumedActivity() {
+        try {
+            Class<?> threadClass = Class.forName("android.app.ActivityThread");
+            Method currentThread = threadClass.getDeclaredMethod("currentActivityThread");
+            currentThread.setAccessible(true);
+            Object thread = currentThread.invoke(null);
+            if (thread == null) return null;
+
+            Field activitiesField = threadClass.getDeclaredField("mActivities");
+            activitiesField.setAccessible(true);
+            Object activitiesObject = activitiesField.get(thread);
+            if (!(activitiesObject instanceof Map)) return null;
+
+            Activity fallback = null;
+            for (Object record : ((Map<?, ?>) activitiesObject).values()) {
+                if (record == null) continue;
+                Class<?> recordClass = record.getClass();
+
+                Field activityField = recordClass.getDeclaredField("activity");
+                activityField.setAccessible(true);
+                Object activityValue = activityField.get(record);
+                if (!(activityValue instanceof Activity)) continue;
+                Activity activity = (Activity) activityValue;
+                if (!activity.getPackageName().equals(context.getPackageName()) ||
+                        activity.isFinishing() ||
+                        (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed())) {
+                    continue;
+                }
+
+                if (activity.hasWindowFocus()) return activity;
+
+                boolean paused = false;
+                boolean stopped = false;
+                try {
+                    Field pausedField = recordClass.getDeclaredField("paused");
+                    pausedField.setAccessible(true);
+                    paused = pausedField.getBoolean(record);
+                } catch (Throwable ignored) {}
+                try {
+                    Field stoppedField = recordClass.getDeclaredField("stopped");
+                    stoppedField.setAccessible(true);
+                    stopped = stoppedField.getBoolean(record);
+                } catch (Throwable ignored) {}
+
+                if (!paused && !stopped) fallback = activity;
+            }
+            return fallback;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private static Context applicationContext(PluginHost host) {
