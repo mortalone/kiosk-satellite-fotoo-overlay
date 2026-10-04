@@ -1,29 +1,24 @@
-## Screensaver Overlay 0.10.3
+## Screensaver Overlay 0.10.4
 
-This release fixes the Plugin Manager error **Too many settings or commands**.
+Packaging release. Overlay behavior is unchanged from 0.10.3.
 
-Kiosk Satellite allows at most 20 settings per plugin. The overlay now uses
-exactly 20:
+## Nature Frame 0.7.1
 
-- **Show overlays on** replaces the previous two destination toggles.
-- Camera test mode moved to plugin actions:
-  **Show doorbell camera test** and **Hide doorbell camera test**.
+Collection switches now expose representative thumbnails directly as
+`entity_picture`. This enables a native Lovelace grid of Picture Entity cards
+where each collection has a miniature preview and tapping the picture toggles
+that collection on/off.
 
-The Now Playing and doorbell overlays continue to work on Kiosk Satellite's own
-screensavers and on Fotoo.
+Each collection switch also exposes:
 
-## Nature Frame 0.7.0
+- screen/profile
+- gallery key
+- image count
+- source
+- private/virtual flags
 
-Nature Frame now supports one independent collection profile per tablet/screen.
+The public Zoo collection remains **Zoo · Public · Swainson**. Modern
+copyrighted Copenhagen Zoo artwork is intentionally not downloaded as a public
+collection; household copies can be kept in **Zoo · Private**.
 
-Create entries named after the screen, then select the matching folder in that
-tablet's Kiosk Satellite:
-
-**Nature Frame -> Screens / profiles -> <screen> -> Portrait/Landscape**
-
-Each profile has its own Home Assistant device and collection switches, so the
-Kitchen tablet can use Kitchen collections while another screen can use Birds,
-Zoo or a different mix.
-
-The old Active collections paths remain compatible with the first/Default
-profile.
+Per-screen profiles from Nature Frame 0.7.0 remain supported.
