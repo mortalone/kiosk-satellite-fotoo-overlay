@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.4
+
+- Packages Nature Frame 0.7.1.
+- Every Nature Frame collection switch now exposes a representative
+  `entity_picture` thumbnail for Lovelace.
+- Adds collection metadata attributes including profile, image count, source,
+  private/virtual flags and gallery key.
+- Adds a native Home Assistant Picture Entity card example for visually
+  selecting active collections without extra frontend cards.
+- Keeps Screensaver Overlay behavior unchanged from 0.10.3.
+
 ## 0.10.3
 
 - Fixes Kiosk Satellite install/update failure caused by exceeding the
