@@ -1,0 +1,9 @@
+{
+  "domain": "nature_frame",
+  "name": "Nature Frame",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/mortalone/kiosk-satellite-fotoo-overlay/tree/main/custom_components/nature_frame",
+  "iot_class": "local_push",
+  "version": "0.1.0"
+}

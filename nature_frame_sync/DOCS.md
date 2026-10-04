@@ -14,11 +14,11 @@ Inky Bird Frame har mange højopløselige PNG-filer. En enkelt retning fylder om
 - **landscape**: bruger upstream `display.png` (1600×1200)
 - **both**: henter begge
 
-På den lodrette vægskærm vælges `portrait`. Hvis en anden kiosk er vandret, kan `both` bruges, hvorefter hver kiosk vælger sin egen mappe.
+På den lodrette vægskærm vælges `portrait`.
 
 ## Placering i Home Assistant
 
-Billederne lander i:
+Kildesamlinger lander i:
 
 ```text
 /media/nature-frame/
@@ -27,7 +27,23 @@ Billederne lander i:
     landscape/
 ```
 
-I Kiosk Satellite vælges **Screensaver → Home Assistant Media → Media source** og den ønskede mappe.
+Companion-integrationen **Nature Frame** kan derefter styre det aktive galleri fra Lovelace og bygger:
+
+```text
+/media/nature-frame/active/
+  portrait/
+  landscape/
+```
+
+Kiosk Satellite skal pege på `nature-frame/active/portrait` på en lodret skærm.
+
+## Lovelace-styring
+
+Installer companion-integrationen fra samme repository via HACS. Den opretter:
+
+`select.nature_frame_gallery`
+
+Det er denne entity, der bruges som dropdown/tile på Lovelace. Et galleri-skift ændrer active-mappen uden at kopiere hele billedsamlingen.
 
 ## Opdateringer og fejl
 
