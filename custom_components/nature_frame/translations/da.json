@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Tilføj Nature Frame-skærmprofil",
+        "description": "Opret én profil for hver tablet eller skærm, der skal have sin egen blanding af biblioteker.",
+        "data": {
+          "profile_name": "Skærm / profilnavn"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Der findes allerede en Nature Frame-profil med dette navn."
+    }
+  }
+}
