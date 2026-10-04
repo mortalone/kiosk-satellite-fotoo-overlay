@@ -1,25 +1,29 @@
-## Screensaver Overlay 0.10.1
+## Screensaver Overlay 0.10.3
 
-The existing custom overlays now work on **Kiosk Satellite's own screensavers**,
-not only Fotoo.
+This release fixes the Plugin Manager error **Too many settings or commands**.
 
-- Uses Kiosk Satellite's official `screensaver.state` and `screensaver.view`
-  plugin events.
-- Keeps the custom Now Playing card, artwork, progress bar and Music Assistant
-  queue handling.
-- Keeps the existing dual door/person triggers and camera overlay.
-- Adds separate settings for **Show on Kiosk Satellite screensavers** and
-  **Show on Fotoo**.
-- Black/blank screensavers remain untouched.
-- The plugin reads initial screensaver state at startup so it can attach to a
-  slideshow that is already running.
-- Fotoo support remains available.
+Kiosk Satellite allows at most 20 settings per plugin. The overlay now uses
+exactly 20:
 
-## Nature Frame 0.6.0
+- **Show overlays on** replaces the previous two destination toggles.
+- Camera test mode moved to plugin actions:
+  **Show doorbell camera test** and **Hide doorbell camera test**.
 
-The same repository contains the current Nature Frame integration with the
-curated Zoo/Kitchen collections, private Zoo collection, multi-collection
-switches and balanced active playlists.
+The Now Playing and doorbell overlays continue to work on Kiosk Satellite's own
+screensavers and on Fotoo.
 
-For poster-like artwork, use **Fill the screen = Off** during testing because
-Kiosk Satellite Smart fill can crop the complete image on the tested device.
+## Nature Frame 0.7.0
+
+Nature Frame now supports one independent collection profile per tablet/screen.
+
+Create entries named after the screen, then select the matching folder in that
+tablet's Kiosk Satellite:
+
+**Nature Frame -> Screens / profiles -> <screen> -> Portrait/Landscape**
+
+Each profile has its own Home Assistant device and collection switches, so the
+Kitchen tablet can use Kitchen collections while another screen can use Birds,
+Zoo or a different mix.
+
+The old Active collections paths remain compatible with the first/Default
+profile.
