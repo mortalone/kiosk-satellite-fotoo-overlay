@@ -29,6 +29,7 @@ async def async_setup_entry(
 class NatureFrameGallerySwitch(SwitchEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:image-multiple"
+    _attr_should_poll = True
 
     def __init__(
         self,
@@ -50,8 +51,6 @@ class NatureFrameGallerySwitch(SwitchEntity):
         self._attr_suggested_object_id = slugify(
             f"nature_frame_{profile_id}_{gallery.title if gallery else gallery_key}"
         )
-        self._attr_entity_picture = gallery.thumbnail if gallery else None
-        self._gallery = gallery
         # Keep existing IDs stable for the migrated Default profile.
         self._attr_unique_id = (
             f"nature_frame_gallery_{gallery_key}"
@@ -71,8 +70,13 @@ class NatureFrameGallerySwitch(SwitchEntity):
         )
 
     @property
+    def entity_picture(self) -> str | None:
+        gallery = self.catalog.gallery(self.gallery_key)
+        return gallery.thumbnail if gallery else None
+
+    @property
     def extra_state_attributes(self) -> dict[str, object]:
-        gallery = self._gallery
+        gallery = self.catalog.gallery(self.gallery_key)
         if gallery is None:
             return {
                 "profile": entry_profile_name(self.entry),
@@ -92,6 +96,11 @@ class NatureFrameGallerySwitch(SwitchEntity):
             "private": gallery.is_private,
             "virtual": gallery.is_virtual,
         }
+
+    async def async_update(self) -> None:
+        # Keep local/private library thumbnails and image counts current without
+        # requiring a Home Assistant restart after files are added.
+        await self.catalog.async_refresh()
 
     @property
     def is_on(self) -> bool:
