@@ -3,10 +3,13 @@
     "step": {
       "user": {
         "title": "Tilføj Nature Frame-skærmprofil",
-        "description": "Opret én profil for hver tablet eller skærm, der skal have sin egen blanding af biblioteker.",
+        "description": "Opret én profil for hver tablet eller skærm med sin egen blanding af biblioteker og udfyldningsmetode.",
         "data": {
           "profile_name": "Skærm / profilnavn",
-          "screen_ratio": "Skærmformat"
+          "screen_ratio": "Skærmformat",
+          "fill_method": "Udfyldning af tomt område",
+          "fill_sample_size": "Kant-sample (px)",
+          "fill_blur_radius": "Sløring af kant (px)"
         }
       }
     },
@@ -17,10 +20,13 @@
   "options": {
     "step": {
       "init": {
-        "title": "Skærmformat",
-        "description": "Vælg skærmens liggende format. Nature Frame vender automatisk forholdet i portrættilstand.",
+        "title": "Nature Frame-visning",
+        "description": "Vælg skærmformat og hvordan Nature Frame udfylder pladsen omkring billeder. Kant-metoderne bevarer farvevariationerne langs billedets kant i stedet for kun at bruge én farve.",
         "data": {
-          "screen_ratio": "Skærmformat"
+          "screen_ratio": "Skærmformat",
+          "fill_method": "Udfyldning af tomt område",
+          "fill_sample_size": "Kant-sample (px)",
+          "fill_blur_radius": "Sløring af kant (px)"
         }
       }
     }
