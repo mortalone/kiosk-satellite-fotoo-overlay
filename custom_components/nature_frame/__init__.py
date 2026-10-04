@@ -6,7 +6,7 @@ from homeassistant.core import HomeAssistant
 from .catalog import NatureFrameCatalog
 from .const import DOMAIN
 
-PLATFORMS = ["select"]
+PLATFORMS = ["select", "switch"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
