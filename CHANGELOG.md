@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.0
+
+- Packages Nature Frame 0.8.0.
+- Adds selectable framing per screen profile: Off, Solid color, Edge stretch,
+  Edge stretch + blur and Mirror.
+- Adds 1–32 px edge sample size and 0–30 px blur controls.
+- Edge modes preserve the varying colors along the actual image edge.
+- Local/private framing cache now invalidates when a source file at the same
+  path changes.
+- Screensaver Overlay behavior is unchanged.
+
 ## 0.10.10
 
 - Packages Nature Frame 0.7.6.
