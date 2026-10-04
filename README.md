@@ -3,7 +3,7 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay 0.10.4
+## Screensaver Overlay 0.10.5
 
 The overlay listens to Kiosk Satellite's official `screensaver.state` and
 `screensaver.view` plugin events, so it works above Kiosk Satellite's own
@@ -20,7 +20,7 @@ settings**:
 Existing Now Playing, Music Assistant, progress and doorbell camera behavior is
 otherwise preserved.
 
-## Nature Frame 0.7.1
+## Nature Frame 0.7.2
 
 Nature Frame now has **one independent profile per tablet/screen**.
 
@@ -66,3 +66,12 @@ dedicated ambient/blurred no-crop renderer is added.
 Use the repository in both Kiosk Satellite Plugin Manager and HACS:
 
 `https://github.com/mortalone/kiosk-satellite-fotoo-overlay`
+
+
+### Nature Frame solid framing
+
+Nature Frame 0.7.2 pre-frames screen-profile images to the configured target
+aspect ratio. Empty bars use solid median colors sampled from the adjacent
+image edge, so poster-style artwork keeps its full frame without black bars.
+
+Use Kiosk Satellite **Fill the screen = Off** with this mode.
