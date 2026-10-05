@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.6
+
+- Finalizes the standalone overlay suite release with complete migration and
+  installation documentation.
+- Publishes the same four tested standalone 0.1.0 plugin packages alongside the
+  compatibility plugin.
+- No functional regression from 0.11.5; this is the canonical documented suite
+  release.
+
 ## 0.11.5
 
 - Adds standalone **Now Playing Overlay 0.1.0** package.
