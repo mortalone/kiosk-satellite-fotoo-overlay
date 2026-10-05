@@ -3,21 +3,29 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay 0.11.4
+## Screensaver Overlay Suite 0.11.5
 
-Now Playing follows the explicitly selected Home Assistant media_player on both
-Kiosk Satellite's own screensavers and Fotoo.
+The original combined Screensaver Overlay remains available as a compatibility
+plugin. The same GitHub release now also publishes standalone ZIP packages for:
 
-Kiosk Satellite screensavers use an in-Activity overlay host so Raspberry Pi
-devices can keep **Legacy WebView renderer = Off**. Fotoo continues to use the
-Android system overlay.
+- **Now Playing Overlay 0.1.0**
+- **Doorbell Overlay 0.1.0**
+- **Screensaver Quick Actions 0.1.0**
+- **Spectrum Visualizer Overlay 0.1.0**
 
-Now Playing cover artwork is kept on screen while replacement artwork loads,
-signed HA proxy token changes are ignored for cover identity, and a small
-bitmap cache prevents unnecessary reloads.
+The standalone plugins are installed with Kiosk Satellite's **Install from ZIP**
+while they are being tested. See `PLUGINS.md` for migration and setup.
 
-Now Playing can be positioned at **Top / Center / Bottom** and sized from
-**30–100%** of screen width.
+Now Playing keeps the stable artwork handling and the in-Activity overlay path,
+so Kiosk Satellite's own Home Assistant Media / Nature Frame screensaver works
+with **Legacy WebView renderer = Off**.
+
+Quick Actions adds a touchable Home Assistant entity/action rail. A person
+entity can supply the displayed face while a different entity such as
+`script.kald_pa_malte` runs when the item is tapped.
+
+Spectrum Visualizer includes both a decorative animated spectrum and an
+experimental microphone FFT mode.
 
 The repository continues to package Nature Frame 0.8.1.
 
