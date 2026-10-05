@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "doorbell-overlay",
+  "name": "Doorbell Overlay",
+  "version": "0.1.0",
+  "minAndroidSdk": 26,
+  "entryClass": "me.jxl.kiosk.plugins.doorbelloverlay.DoorbellOverlayPlugin",
+  "description": "Doorbell camera overlay for Kiosk Satellite screensavers and Fotoo with two Home Assistant triggers and aspect-safe camera sizing.",
+  "author": "Local Kiosk Satellite project",
+  "license": "MIT",
+  "capabilities": [
+    "overlay",
+    "host.read"
+  ],
+  "settings": [
+    {
+      "key": "overlayTarget",
+      "type": "select",
+      "title": "Show overlay on",
+      "default": "Kiosk Satellite + Fotoo",
+      "options": [
+        "Kiosk Satellite + Fotoo",
+        "Kiosk Satellite only",
+        "Fotoo only"
+      ],
+      "group": "Screensaver",
+      "description": "Choose whether the doorbell camera is shown on Kiosk Satellite's own screensavers, Fotoo, or both."
+    },
+    {
+      "key": "doorbellEntity",
+      "type": "entity",
+      "title": "Trigger 1",
+      "default": "",
+      "group": "Doorbell",
+      "description": "Primary trigger, for example a Frigate person occupancy binary_sensor."
+    },
+    {
+      "key": "doorbellEntity2",
+      "type": "entity",
+      "title": "Trigger 2",
+      "default": "",
+      "group": "Doorbell",
+      "description": "Secondary trigger, for example the Reolink visitor/ring-button binary_sensor."
+    },
+    {
+      "key": "doorbellCameraEntity",
+      "type": "entity",
+      "title": "Doorbell camera entity",
+      "default": "",
+      "group": "Doorbell",
+      "description": "Home Assistant camera entity shown when either trigger activates."
+    },
+    {
+      "key": "cameraOpacity",
+      "type": "number",
+      "title": "Camera visibility",
+      "default": 100,
+      "min": 10,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "group": "Doorbell",
+      "description": "Camera overlay opacity."
+    },
+    {
+      "key": "cameraSizePercent",
+      "type": "number",
+      "title": "Camera size",
+      "default": 90,
+      "min": 30,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "group": "Doorbell",
+      "description": "Camera width as a percentage of screen width. Height follows the camera frame aspect ratio."
+    },
+    {
+      "key": "cameraPosition",
+      "type": "select",
+      "title": "Camera position",
+      "default": "Center",
+      "options": [
+        "Top",
+        "Center",
+        "Bottom"
+      ],
+      "group": "Doorbell",
+      "description": "Vertical position of the camera overlay."
+    },
+    {
+      "key": "doorbellSeconds",
+      "type": "number",
+      "title": "Camera display time",
+      "default": 20,
+      "min": 5,
+      "max": 60,
+      "step": 1,
+      "unit": "s",
+      "group": "Doorbell",
+      "description": "How long the doorbell camera stays visible after a trigger."
+    }
+  ],
+  "commands": [
+    {
+      "id": "showCameraTest",
+      "title": "Show doorbell camera test"
+    },
+    {
+      "id": "hideCameraTest",
+      "title": "Hide doorbell camera test"
+    },
+    {
+      "id": "hide",
+      "title": "Hide doorbell overlay"
+    }
+  ],
+  "groups": [
+    {
+      "title": "Screensaver"
+    },
+    {
+      "title": "Doorbell"
+    }
+  ]
+}
