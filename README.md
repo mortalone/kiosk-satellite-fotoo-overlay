@@ -3,7 +3,7 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay Suite 0.11.5
+## Screensaver Overlay Suite 0.11.6
 
 The original combined Screensaver Overlay remains available as a compatibility
 plugin. The same GitHub release now also publishes standalone ZIP packages for:
