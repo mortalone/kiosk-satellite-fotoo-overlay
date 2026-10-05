@@ -1,4 +1,4 @@
-## Screensaver Overlay Suite 0.11.5
+## Screensaver Overlay Suite 0.11.6
 
 This release starts the migration from one large overlay plugin to smaller,
 independent plugins. The existing combined **Screensaver Overlay** is still
