@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.11.5
+
+- Adds standalone **Now Playing Overlay 0.1.0** package.
+- Adds standalone **Doorbell Overlay 0.1.0** package so camera settings no
+  longer consume Now Playing's setting budget.
+- Adds **Screensaver Quick Actions 0.1.0**, a touchable Home Assistant
+  entity/action rail with up to six items and person entity pictures.
+- Adds **Spectrum Visualizer Overlay 0.1.0** with animated and experimental
+  microphone FFT modes.
+- Adds a Home Assistant example selector for switching between Nature Frame
+  (Kiosk Satellite Home Assistant Media) and Fotoo without racing idle timers.
+- Build workflow now compiles and publishes all standalone ZIP packages in the
+  same release.
+- The original combined plugin remains unchanged functionally for safe migration.
+
 ## 0.11.4
 
 - Fixes Now Playing cover art flicker and temporary blank covers.
