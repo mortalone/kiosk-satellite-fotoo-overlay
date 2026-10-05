@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Screensaver Overlay",
-  "version": "0.11.4",
+  "version": "0.11.5",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
-  "description": "Native Now Playing and doorbell overlays for Kiosk Satellite screensavers and Fotoo, with Music Assistant queue tracking, artwork retry and camera triggers.",
+  "description": "Compatibility bundle for Now Playing and doorbell overlays. Standalone overlay plugins are published in the same release for migration/testing.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
