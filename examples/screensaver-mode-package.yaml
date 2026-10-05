@@ -1,0 +1,66 @@
+# Example Home Assistant package for switching the Raspberry Pi touchscreen
+# between Kiosk Satellite / Nature Frame and Android Fotoo.
+#
+# Expected Kiosk Satellite entities:
+#   switch.raspberry_raspberry_pi_4_keep_screen_on
+#   switch.raspberry_raspberry_pi_4_screensaver
+#   select.raspberry_raspberry_pi_4_screensaver_mode
+#   number.raspberry_raspberry_pi_4_screensaver_timeout
+
+input_select:
+  raspberry_screensaver_source:
+    name: Raspberry screensaver
+    icon: mdi:image-multiple
+    options:
+      - Nature Frame
+      - Fotoo
+
+automation:
+  - alias: Raspberry screensaver source
+    id: raspberry_screensaver_source
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: input_select.raspberry_screensaver_source
+    actions:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_select.raspberry_screensaver_source
+                state: Nature Frame
+            sequence:
+              - action: switch.turn_on
+                target:
+                  entity_id:
+                    - switch.raspberry_raspberry_pi_4_keep_screen_on
+                    - switch.raspberry_raspberry_pi_4_screensaver
+              - action: select.select_option
+                target:
+                  entity_id: select.raspberry_raspberry_pi_4_screensaver_mode
+                data:
+                  option: Home Assistant Media
+              - action: number.set_value
+                target:
+                  entity_id: number.raspberry_raspberry_pi_4_screensaver_timeout
+                data:
+                  value: 300
+          - conditions:
+              - condition: state
+                entity_id: input_select.raspberry_screensaver_source
+                state: Fotoo
+            sequence:
+              # Disable Kiosk Satellite's own idle screensaver so there is no
+              # race between it and Android's DreamService. Allow Android's
+              # normal display timeout to reach Fotoo instead.
+              - action: switch.turn_off
+                target:
+                  entity_id:
+                    - switch.raspberry_raspberry_pi_4_screensaver
+                    - switch.raspberry_raspberry_pi_4_keep_screen_on
+
+# Compact Lovelace example:
+#
+# type: custom:mushroom-select-card
+# entity: input_select.raspberry_screensaver_source
+# name: Screensaver
+# icon: mdi:image-multiple
