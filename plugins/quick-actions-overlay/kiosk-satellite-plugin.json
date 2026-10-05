@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "quick-actions-overlay",
+  "name": "Screensaver Quick Actions",
+  "version": "0.1.0",
+  "minAndroidSdk": 26,
+  "entryClass": "me.jxl.kiosk.plugins.quickactionsoverlay.QuickActionsOverlayPlugin",
+  "description": "Touchable Home Assistant entity/action rail for Kiosk Satellite screensavers and Fotoo.",
+  "author": "Local Kiosk Satellite project",
+  "license": "MIT",
+  "capabilities": [
+    "overlay",
+    "host.read"
+  ],
+  "settings": [
+    {
+      "key": "overlayTarget",
+      "type": "select",
+      "title": "Show on",
+      "default": "Kiosk Satellite + Fotoo",
+      "options": [
+        "Kiosk Satellite + Fotoo",
+        "Kiosk Satellite only",
+        "Fotoo only"
+      ],
+      "group": "Layout",
+      "description": "Choose which screensavers show the action rail."
+    },
+    {
+      "key": "position",
+      "type": "select",
+      "title": "Position",
+      "default": "Center left",
+      "options": [
+        "Top left",
+        "Top right",
+        "Center left",
+        "Center right",
+        "Bottom left",
+        "Bottom right"
+      ],
+      "group": "Layout",
+      "description": "Anchor point for the action rail."
+    },
+    {
+      "key": "layout",
+      "type": "select",
+      "title": "Layout",
+      "default": "Vertical",
+      "options": [
+        "Vertical",
+        "Horizontal"
+      ],
+      "group": "Layout",
+      "description": "Stack actions vertically or horizontally."
+    },
+    {
+      "key": "itemSize",
+      "type": "number",
+      "title": "Picture size",
+      "default": 64,
+      "min": 48,
+      "max": 120,
+      "step": 4,
+      "unit": "dp",
+      "group": "Layout",
+      "description": "Avatar/icon size for each item."
+    },
+    {
+      "key": "spacing",
+      "type": "number",
+      "title": "Spacing",
+      "default": 8,
+      "min": 0,
+      "max": 24,
+      "step": 1,
+      "unit": "dp",
+      "group": "Layout",
+      "description": "Space between items."
+    },
+    {
+      "key": "opacity",
+      "type": "number",
+      "title": "Opacity",
+      "default": 90,
+      "min": 30,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "group": "Layout",
+      "description": "Opacity of the action rail."
+    },
+    {
+      "key": "showLabels",
+      "type": "boolean",
+      "title": "Show names and states",
+      "default": true,
+      "group": "Layout",
+      "description": "Show friendly name and current state beside the picture."
+    },
+    {
+      "key": "item1Entity",
+      "type": "entity",
+      "title": "Item 1 display entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity used for picture, name and state."
+    },
+    {
+      "key": "item1Action",
+      "type": "entity",
+      "title": "Item 1 action entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity activated when tapped. Leave empty to act on the display entity."
+    },
+    {
+      "key": "item2Entity",
+      "type": "entity",
+      "title": "Item 2 display entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity used for picture, name and state."
+    },
+    {
+      "key": "item2Action",
+      "type": "entity",
+      "title": "Item 2 action entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity activated when tapped. Leave empty to act on the display entity."
+    },
+    {
+      "key": "item3Entity",
+      "type": "entity",
+      "title": "Item 3 display entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity used for picture, name and state."
+    },
+    {
+      "key": "item3Action",
+      "type": "entity",
+      "title": "Item 3 action entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity activated when tapped. Leave empty to act on the display entity."
+    },
+    {
+      "key": "item4Entity",
+      "type": "entity",
+      "title": "Item 4 display entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity used for picture, name and state."
+    },
+    {
+      "key": "item4Action",
+      "type": "entity",
+      "title": "Item 4 action entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity activated when tapped. Leave empty to act on the display entity."
+    },
+    {
+      "key": "item5Entity",
+      "type": "entity",
+      "title": "Item 5 display entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity used for picture, name and state."
+    },
+    {
+      "key": "item5Action",
+      "type": "entity",
+      "title": "Item 5 action entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity activated when tapped. Leave empty to act on the display entity."
+    },
+    {
+      "key": "item6Entity",
+      "type": "entity",
+      "title": "Item 6 display entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity used for picture, name and state."
+    },
+    {
+      "key": "item6Action",
+      "type": "entity",
+      "title": "Item 6 action entity",
+      "default": "",
+      "group": "Actions",
+      "description": "Entity activated when tapped. Leave empty to act on the display entity."
+    }
+  ],
+  "commands": [
+    {
+      "id": "show",
+      "title": "Show Quick Actions now"
+    },
+    {
+      "id": "test",
+      "title": "Show Quick Actions test"
+    },
+    {
+      "id": "hide",
+      "title": "Hide Quick Actions"
+    }
+  ],
+  "groups": [
+    {
+      "title": "Layout"
+    },
+    {
+      "title": "Actions"
+    }
+  ]
+}
