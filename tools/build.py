@@ -13,9 +13,24 @@ def android_platform(sdk_root, requested):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--android-platform", default="35")
+parser.add_argument(
+    "--project",
+    default=".",
+    help="Plugin project directory relative to repository root (default: root plugin).",
+)
 args = parser.parse_args()
 
-manifest_bytes = (ROOT / "kiosk-satellite-plugin.json").read_bytes()
+project = (ROOT / args.project).resolve()
+if ROOT != project and ROOT not in project.parents:
+    raise SystemExit("Project must live inside the repository.")
+manifest_path = project / "kiosk-satellite-plugin.json"
+source_root = project / "src"
+if not manifest_path.is_file():
+    raise SystemExit(f"Missing plugin manifest: {manifest_path}")
+if not source_root.is_dir():
+    raise SystemExit(f"Missing plugin source directory: {source_root}")
+
+manifest_bytes = manifest_path.read_bytes()
 manifest = json.loads(manifest_bytes)
 sdk_root = Path(os.environ.get("ANDROID_HOME", os.environ.get("ANDROID_SDK_ROOT", str(Path.home() / "android-sdk"))))
 platform = android_platform(sdk_root, args.android_platform)
@@ -29,7 +44,7 @@ d8 = build_tools[-1]
 out = ROOT / "dist"
 out.mkdir(exist_ok=True)
 
-with tempfile.TemporaryDirectory(prefix="ks-fotoo-overlay-") as td:
+with tempfile.TemporaryDirectory(prefix=f'ks-{manifest["id"]}-') as td:
     td = Path(td)
     sdk_classes = td / "sdk"
     classes = td / "classes"
@@ -43,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="ks-fotoo-overlay-") as td:
 
     subprocess.run(["javac", "--release", "8", "-cp", os.pathsep.join([str(sdk_jar), str(platform)]),
                     "-d", str(classes),
-                    *map(str, sorted((ROOT / "src").rglob("*.java")))], check=True)
+                    *map(str, sorted(source_root.rglob("*.java")))], check=True)
 
     subprocess.run([str(d8), "--min-api", str(manifest["minAndroidSdk"]),
                     "--lib", str(platform), "--classpath", str(sdk_jar),
