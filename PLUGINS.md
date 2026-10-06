@@ -109,16 +109,12 @@ with Animated mode, then test Microphone mode.
 An optional media_player can gate the visualizer so it only appears while the
 player state is `playing`.
 
-## Simple idle engine switch (recommended)
+## Idle engine preference
 
-`examples/screensaver-engine-script.yaml` is a single script for HA's script YAML
-editor. It switches only the three existing Kiosk setting entities: Screensaver,
-Keep screen on, and Screensaver mode. With Kiosk screensaver enabled it selects
-Fotoo dominance by disabling Kiosk screensaver and Keep screen on. Otherwise it
-selects Home Assistant Media and enables both settings for Kiosk dominance.
-No helper, package or automation is required. It does not launch Fotoo, start
-Wall Art immediately or touch the separate Screensaver active entity. Android
-must already have Fotoo configured as its screensaver, as in the existing setup.
+Choose the dominant idle screensaver engine through the existing Screensaver,
+Keep screen on and Screensaver mode setting entities. A personal HA script can
+change these three settings without launching either app. This script is not
+maintained in the repository.
 
 Quick Actions is updated through its dedicated repo. From 0.2.9, **Show on**
 contains permanent combinations for dashboard, Kiosk screensaver and Fotoo.

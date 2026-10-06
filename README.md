@@ -27,9 +27,8 @@ hides actions by default and always hides this clock.
 For a compact rail, turn off **Show names and states**.
 
 Nature Frame 0.8.2 fixes private gallery covers with signed local preview URLs.
-For a simple non-immediate choice of screensaver engine, use
-`examples/screensaver-engine-script.yaml` in HA's script YAML editor. It changes
-only the three existing setting entities. See `PLUGINS.md` for setup.
+Screensaver engine preference can be changed through the existing Screensaver,
+Keep screen on and Screensaver mode setting entities.
 
  A person
 entity can supply the displayed face while a different entity such as
