@@ -27,8 +27,9 @@ hides actions by default and always hides this clock.
 For a compact rail, turn off **Show names and states**.
 
 Nature Frame 0.8.2 fixes private gallery covers with signed local preview URLs.
-The example HA package provides a chooser and script to switch immediately
-between Nature Frame and Fotoo. See `PLUGINS.md` for setup.
+For a simple non-immediate choice of screensaver engine, use
+`examples/screensaver-engine-script.yaml` in HA's script YAML editor. It changes
+only the three existing setting entities. See `PLUGINS.md` for setup.
 
  A person
 entity can supply the displayed face while a different entity such as

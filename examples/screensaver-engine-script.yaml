@@ -1,0 +1,30 @@
+# Paste into the YAML editor for ONE Home Assistant script.
+# Switches which engine handles future inactivity; does not launch either app.
+# The active Screensaver switch is separate and is intentionally not used.
+alias: Raspberry – skift screensaver-motor
+mode: single
+sequence:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: switch.raspberry_raspberry_pi_4_screensaver
+            state: "on"
+        sequence:
+          # Fotoo/Android gets the idle screen; Kiosk stops competing for it.
+          - action: switch.turn_off
+            target:
+              entity_id:
+                - switch.raspberry_raspberry_pi_4_screensaver
+                - switch.raspberry_raspberry_pi_4_keep_screen_on
+    default:
+      # Kiosk handles inactivity using the existing Nature Frame media source.
+      - action: select.select_option
+        target:
+          entity_id: select.raspberry_raspberry_pi_4_screensaver_mode
+        data:
+          option: Home Assistant Media
+      - action: switch.turn_on
+        target:
+          entity_id:
+            - switch.raspberry_raspberry_pi_4_keep_screen_on
+            - switch.raspberry_raspberry_pi_4_screensaver
