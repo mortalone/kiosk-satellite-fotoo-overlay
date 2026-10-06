@@ -2,6 +2,16 @@
 package me.jxl.kiosk.plugins.quickactionsoverlay;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.SharedPreferences;
+import android.view.ContextThemeWrapper;
+import android.widget.CheckBox;
+import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
+import android.widget.SeekBar;
+import android.text.format.DateFormat;
+import java.util.Date;
 import android.app.Application;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -9,22 +19,26 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.text.format.DateFormat;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -39,12 +53,13 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -80,6 +95,8 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
     private int clockSize = 28;
     private TextView clock;
     private int presentedSurface = -1;
+    private long lastRulesMinute = -1;
+    private AlertDialog displayDialog;
     private String clockText = "";
     private final Runnable presentationTick = new Runnable() {
         @Override public void run() {
@@ -89,16 +106,22 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         }
     };
 
+
     private String position = "Center left";
     private String layout = "Vertical";
     private int itemSizeDp = 64;
     private int spacingDp = 8;
     private int opacity = 90;
     private boolean showLabels = true;
+    private boolean coloredBattery;
+    private int[] itemOrder = new int[] {0, 1, 2, 3, 4, 5};
     private String haBaseUrl = "";
 
     private final String[] displayEntities = new String[ITEM_COUNT];
     private final String[] actionEntities = new String[ITEM_COUNT];
+    private final String[] visibilityEntities = new String[ITEM_COUNT];
+    private final String[] visibilityConditions = new String[ITEM_COUNT];
+    private final String[] visibilityValues = new String[ITEM_COUNT];
     private final Map<String, EntitySnapshot> snapshots = new HashMap<>();
     private final Set<String> subscriptions = new HashSet<>();
 
@@ -114,6 +137,8 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
             return;
         }
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+        coloredBattery = context.getSharedPreferences("quick_actions_preferences", Context.MODE_PRIVATE)
+                .getBoolean("colored_battery", false);
         if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(context)) {
             host.status("Grant Display over other apps to Kiosk Satellite.", true);
             return;
@@ -139,7 +164,17 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
 
     @Override
     public synchronized void execute(String command, Map<String, Object> arguments) {
-        if ("openFotoo".equals(command)) {
+        if ("batteryTextColor".equals(command) || "batteryLevelColor".equals(command)) {
+            final boolean useLevelColor = "batteryLevelColor".equals(command);
+            main.post(() -> {
+                coloredBattery = useLevelColor;
+                context.getSharedPreferences("quick_actions_preferences", Context.MODE_PRIVATE)
+                        .edit().putBoolean("colored_battery", useLevelColor).apply();
+                refreshRail();
+            });
+        } else if ("displaySettings".equals(command)) {
+            main.post(this::showDisplaySettings);
+        } else if ("openFotoo".equals(command)) {
             main.post(() -> {
                 try {
                     Intent launch = context.getPackageManager().getLaunchIntentForPackage("com.bo.fotoo");
@@ -212,6 +247,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
     @Override
     public synchronized void stop() {
         main.removeCallbacks(presentationTick);
+        main.post(() -> { if (displayDialog != null) { displayDialog.dismiss(); displayDialog = null; } });
         for (String entity : new HashSet<>(subscriptions)) {
             try { host.unsubscribe("ha.entity." + entity); } catch (Throwable ignored) {}
         }
@@ -231,18 +267,10 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
 
     private void applySettings(Map<String, Object> values) {
         manualHidden = false;
+        readDisplaySettings();
         String target = stringSetting(values, "overlayTarget");
         showOnKiosk = !"Fotoo only".equals(target);
         showOnFotoo = !"Kiosk Satellite only".equals(target);
-        showOnDashboard = Boolean.TRUE.equals(values.get("showOnDashboard"));
-        showOnParty = Boolean.TRUE.equals(values.get("showOnParty"));
-        clockOnDashboard = Boolean.TRUE.equals(values.get("clockOnDashboard"));
-        clockOnKiosk = Boolean.TRUE.equals(values.get("clockOnKiosk"));
-        clockOnFotoo = Boolean.TRUE.equals(values.get("clockOnFotoo"));
-        clockDate = values.get("clockDate") == null || Boolean.TRUE.equals(values.get("clockDate"));
-        String cp = stringSetting(values, "clockPosition");
-        if (!cp.isEmpty()) clockPosition = cp;
-        clockSize = intSetting(values, "clockSize", 28, 18, 64);
 
         String nextPosition = stringSetting(values, "position");
         if (!nextPosition.isEmpty()) position = nextPosition;
@@ -253,13 +281,24 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         opacity = intSetting(values, "opacity", 90, 30, 100);
         showLabels = values.get("showLabels") == null ||
                 Boolean.TRUE.equals(values.get("showLabels"));
+        String itemRules = stringSetting(values, "itemOrder");
+        itemOrder = parseItemOrder(itemRules);
+        parseVisibilityRules(itemRules);
 
         Set<String> wanted = new HashSet<>();
         for (int i = 0; i < ITEM_COUNT; i++) {
-            displayEntities[i] = stringSetting(values, "item" + (i + 1) + "Entity");
-            actionEntities[i] = stringSetting(values, "item" + (i + 1) + "Action");
+            int slot = i + 1;
+            displayEntities[i] = stringSetting(values, "item" + slot + "Entity");
+            actionEntities[i] = stringSetting(values, "item" + slot + "Action");
+            // Display and visibility entities need live state. Action-only
+            // entities do not: taps can call their service without consuming
+            // one of the plugin host's 16 entity subscriptions.
             if (!displayEntities[i].isEmpty()) wanted.add(displayEntities[i]);
-            if (!actionEntities[i].isEmpty()) wanted.add(actionEntities[i]);
+            if (!visibilityEntities[i].isEmpty() &&
+                    !"Always".equals(visibilityConditions[i]) &&
+                    !"Time between".equals(visibilityConditions[i])) {
+                wanted.add(visibilityEntities[i]);
+            }
         }
 
         for (String old : new HashSet<>(subscriptions)) {
@@ -291,7 +330,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
     private void pollEntity(String entity) {
         if (entity == null || entity.isEmpty() || host == null) return;
         Map<String, Object> args = new HashMap<>();
-        args.put("entity_id", entity);
+        args.put("entityId", entity);
         host.executeCommand("getHaEntityState", args, (ok, data, error) -> {
             if (!ok || !(data instanceof Map)) return;
             Map<?, ?> m = (Map<?, ?>) data;
@@ -304,11 +343,95 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         });
     }
 
+    private boolean partyPresentationActive() {
+        if (context == null) return false;
+        for (String name : new String[]{"party_mode_presentation", "now_playing_presentation"}) {
+            SharedPreferences p = context.getSharedPreferences(name, Context.MODE_PRIVATE);
+            if (p.getBoolean("party_fullscreen", false) && p.getLong("party_until_ms", 0) > System.currentTimeMillis()) return true;
+        }
+        return false;
+    }
+
+    private boolean partyAllowsActions() {
+        if (context == null) return false;
+        SharedPreferences p = context.getSharedPreferences("party_mode_presentation", Context.MODE_PRIVATE);
+        return p.getBoolean("party_fullscreen", false) && p.getLong("party_until_ms", 0) > System.currentTimeMillis()
+                && p.getBoolean("allow_quick_actions", false);
+    }
+
+    private void readDisplaySettings() {
+        if (context == null) return;
+        SharedPreferences p = context.getSharedPreferences("quick_actions_preferences", Context.MODE_PRIVATE);
+        showOnDashboard = p.getBoolean("dashboard", false);
+        showOnParty = p.getBoolean("party", false);
+        clockOnDashboard = p.getBoolean("clock_dashboard", false);
+        clockOnKiosk = p.getBoolean("clock_kiosk", false);
+        clockOnFotoo = p.getBoolean("clock_fotoo", false);
+        clockDate = p.getBoolean("clock_date", true);
+        clockPosition = p.getString("clock_position", "Top right");
+        clockSize = Math.max(18, Math.min(64, p.getInt("clock_size", 28)));
+    }
+
+    private CheckBox displayCheck(Context ui, LinearLayout body, String text, boolean value) {
+        CheckBox check = new CheckBox(ui); check.setText(text); check.setChecked(value);
+        body.addView(check); return check;
+    }
+
+    private void showDisplaySettings() {
+        if (host == null || context == null) return;
+        if (displayDialog != null) { displayDialog.dismiss(); displayDialog = null; }
+        Activity a = activeKioskActivity();
+        boolean inApp = a != null && a.hasWindowFocus();
+        Context ui = inApp ? a : new ContextThemeWrapper(context, android.R.style.Theme_Material_Dialog_Alert);
+        LinearLayout body = new LinearLayout(ui); body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(16), dp(8), dp(16), dp(8));
+        CheckBox dashboard = displayCheck(ui, body, "Quick actions on dashboard", showOnDashboard);
+        CheckBox party = displayCheck(ui, body, "Quick actions in Party Mode", showOnParty);
+        CheckBox cDashboard = displayCheck(ui, body, "Clock on dashboard", clockOnDashboard);
+        CheckBox cKiosk = displayCheck(ui, body, "Clock on Kiosk screensaver", clockOnKiosk);
+        CheckBox cFotoo = displayCheck(ui, body, "Clock on Fotoo", clockOnFotoo);
+        CheckBox date = displayCheck(ui, body, "Show clock date", clockDate);
+        TextView note = new TextView(ui); note.setText("The clock is always hidden in Party Mode. Keep only one clock on the screensaver."); body.addView(note);
+        TextView positionLabel = new TextView(ui); positionLabel.setText("Clock position"); body.addView(positionLabel);
+        String[] positions = {"Top left", "Top right", "Center left", "Center right", "Bottom left", "Bottom right"};
+        Spinner position = new Spinner(ui);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(ui, android.R.layout.simple_spinner_item, positions);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); position.setAdapter(adapter);
+        for (int i = 0; i < positions.length; i++) if (positions[i].equals(clockPosition)) position.setSelection(i);
+        body.addView(position);
+        TextView sizeLabel = new TextView(ui); sizeLabel.setText("Clock size: " + clockSize + " sp"); body.addView(sizeLabel);
+        SeekBar size = new SeekBar(ui); size.setMax(46); size.setProgress(clockSize - 18); body.addView(size);
+        size.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) { sizeLabel.setText("Clock size: " + (value + 18) + " sp"); }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        ScrollView scroll = new ScrollView(ui); scroll.addView(body);
+        AlertDialog dialog = new AlertDialog.Builder(ui).setTitle("Display & clock settings").setView(scroll)
+                .setNegativeButton("Cancel", null).setPositiveButton("Save", (d, which) -> {
+                    if (host == null) return;
+                    context.getSharedPreferences("quick_actions_preferences", Context.MODE_PRIVATE).edit()
+                            .putBoolean("dashboard", dashboard.isChecked()).putBoolean("party", party.isChecked())
+                            .putBoolean("clock_dashboard", cDashboard.isChecked()).putBoolean("clock_kiosk", cKiosk.isChecked())
+                            .putBoolean("clock_fotoo", cFotoo.isChecked()).putBoolean("clock_date", date.isChecked())
+                            .putString("clock_position", positions[position.getSelectedItemPosition()])
+                            .putInt("clock_size", size.getProgress() + 18).apply();
+                    readDisplaySettings(); manualHidden = false; forcePreview = false;
+                    hideRail(); hideClock(); updatePresentation();
+                    host.status("Display and clock settings saved.", false);
+                }).create();
+        if (!inApp && dialog.getWindow() != null) dialog.getWindow().setType(Build.VERSION.SDK_INT >= 26
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE);
+        displayDialog = dialog;
+        dialog.setOnDismissListener(d -> { if (displayDialog == dialog) displayDialog = null; });
+        dialog.show();
+    }
+
     private int surface() {
         Activity a = activeKioskActivity();
         boolean foreground = a != null && a.hasWindowFocus();
         View root = a == null ? null : a.findViewById(android.R.id.content);
-        boolean party = root != null && root.findViewWithTag("party-mode:view") != null;
+        boolean party = (root != null && root.findViewWithTag("party-mode:view") != null) || partyPresentationActive();
         boolean blank = "black".equals(kioskScreensaverView) || "blank".equals(kioskScreensaverView);
         return OverlayVisibility.surface(foreground, dreaming || manualFotoo, kioskScreensaverActive, blank, party);
     }
@@ -322,10 +445,12 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
             presentedSurface = surface;
         }
         boolean preview = forcePreview && surface != OverlayVisibility.PARTY;
-        boolean actions = preview || OverlayVisibility.visible(surface, showOnDashboard, showOnKiosk, showOnFotoo, showOnParty);
+        boolean actions = preview || OverlayVisibility.visible(surface, showOnDashboard, showOnKiosk, showOnFotoo, showOnParty || partyAllowsActions());
         boolean time = OverlayVisibility.visible(surface, clockOnDashboard, clockOnKiosk, clockOnFotoo, false);
         if (actions) {
             if (rail == null) { ensureRail(); refreshRail(); }
+            long minute = System.currentTimeMillis() / 60000;
+            if (minute != lastRulesMinute) { lastRulesMinute = minute; refreshRail(); }
         } else hideRail();
         if (time) { ensureClock(); refreshClock(); } else hideClock();
     }
@@ -372,7 +497,8 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         rail.setAlpha(opacity / 100f);
 
         itemViews.clear();
-        for (int i = 0; i < ITEM_COUNT; i++) {
+        for (int orderIndex = 0; orderIndex < ITEM_COUNT; orderIndex++) {
+            final int i = itemOrder[orderIndex];
             if (displayEntities[i] == null || displayEntities[i].isEmpty()) continue;
             final int index = i;
 
@@ -385,11 +511,9 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
             item.setClickable(true);
             item.setOnClickListener(v -> performAction(index));
 
-            ImageView avatar = new ImageView(context);
-            avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            avatar.setBackground(cardBackground(0xFF40434A, 999));
+            LeadingView leading = new LeadingView(context);
             int avatarSize = dp(itemSizeDp);
-            item.addView(avatar, new LinearLayout.LayoutParams(avatarSize, avatarSize));
+            item.addView(leading, new LinearLayout.LayoutParams(avatarSize, avatarSize));
 
             TextView label = new TextView(context);
             label.setTextColor(Color.WHITE);
@@ -407,7 +531,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
             if ("Horizontal".equals(layout)) itemParams.rightMargin = dp(spacingDp);
             else itemParams.bottomMargin = dp(spacingDp);
             rail.addView(item, itemParams);
-            itemViews.add(new ItemViews(index, avatar, label));
+            itemViews.add(new ItemViews(index, item, leading, label));
         }
 
         int gravity = gravityForPosition(position);
@@ -430,6 +554,10 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
     private void refreshRail() {
         if (rail == null) return;
         for (ItemViews item : itemViews) {
+            boolean visible = itemVisible(item.index);
+            item.root.setVisibility(visible ? View.VISIBLE : View.GONE);
+            if (!visible) continue;
+
             String entity = displayEntities[item.index];
             EntitySnapshot snapshot = snapshots.get(entity);
             if (snapshot == null) {
@@ -439,18 +567,128 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
 
             String friendly = attr(snapshot.attributes, "friendly_name", entity);
             String state = snapshot.state;
+            String unit = attr(snapshot.attributes, "unit_of_measurement", "").trim();
+            String deviceClass = attr(snapshot.attributes, "device_class", "");
+            boolean battery = BatteryLevel.isBattery(
+                    deviceClass, attr(snapshot.attributes, "icon", ""));
+            int batteryLevel = battery ? BatteryLevel.parse(state) : -1;
+            String badge = percentageBadge(state, unit, deviceClass);
+
+            String displayState = state;
+            if (!state.isEmpty() &&
+                    !"unknown".equalsIgnoreCase(state) &&
+                    !"unavailable".equalsIgnoreCase(state) &&
+                    !unit.isEmpty() &&
+                    !state.endsWith(unit)) {
+                displayState = state + ("%".equals(unit) ? " %" : " " + unit);
+            }
+
+            // Batteries show a filled icon and one percentage beside it.
+            // Other percentage sensors keep the number inside the circle.
             item.label.setText(
-                    state.isEmpty() || "unknown".equalsIgnoreCase(state)
+                    battery && batteryLevel >= 0
+                            ? friendly + "\n" + batteryLevel + " %"
+                            : !badge.isEmpty()
                             ? friendly
-                            : friendly + "\n" + state);
+                            : (displayState.isEmpty() ||
+                               "unknown".equalsIgnoreCase(displayState)
+                                    ? friendly
+                                    : friendly + "\n" + displayState));
 
             String picture = attr(snapshot.attributes, "entity_picture", "");
-            if (!picture.isEmpty()) loadPicture(item, picture);
-            else {
+            if (battery) {
                 item.picture = "";
-                item.avatar.setImageDrawable(null);
-                item.avatar.setBackground(cardBackground(0xFF40434A, 999));
+                item.leading.setBatteryLevel(batteryLevel, coloredBattery, item.label.getCurrentTextColor());
+            } else if (!picture.isEmpty()) {
+                loadPicture(item, picture);
+            } else {
+                item.picture = "";
+                item.leading.setBadgeText(
+                        badge.isEmpty() ? initials(friendly) : badge);
             }
+        }
+    }
+
+    private boolean itemVisible(int index) {
+        String condition = visibilityConditions[index];
+        if (condition == null || condition.isEmpty() || "Always".equals(condition)) {
+            return true;
+        }
+        String value = visibilityValues[index] == null ? "" : visibilityValues[index].trim();
+
+        if ("Time between".equals(condition)) {
+            return timeBetween(value);
+        }
+
+        String entity = visibilityEntities[index];
+        if (entity == null || entity.isEmpty()) return true;
+        EntitySnapshot snapshot = snapshots.get(entity);
+        if (snapshot == null) return false;
+        String state = snapshot.state == null ? "" : snapshot.state.trim();
+
+        if ("Active".equals(condition)) return activeState(state);
+        if ("Inactive".equals(condition)) return !activeState(state);
+        if ("State equals".equals(condition)) return state.equalsIgnoreCase(value);
+        if ("State not equals".equals(condition)) return !state.equalsIgnoreCase(value);
+
+        Double number = parseNumber(state);
+        if (number == null) return false;
+        if ("Numeric above".equals(condition)) {
+            Double threshold = parseNumber(value);
+            return threshold != null && number > threshold;
+        }
+        if ("Numeric below".equals(condition)) {
+            Double threshold = parseNumber(value);
+            return threshold != null && number < threshold;
+        }
+        if ("Numeric between".equals(condition)) {
+            double[] bounds = parseRange(value);
+            return bounds != null && number >= Math.min(bounds[0], bounds[1]) &&
+                    number <= Math.max(bounds[0], bounds[1]);
+        }
+        return true;
+    }
+
+    private static boolean activeState(String state) {
+        String s = state == null ? "" : state.trim().toLowerCase(java.util.Locale.ROOT);
+        return "on".equals(s) || "true".equals(s) || "home".equals(s) ||
+                "playing".equals(s) || "open".equals(s) || "detected".equals(s) ||
+                "occupied".equals(s) || "present".equals(s);
+    }
+
+    private static Double parseNumber(String value) {
+        try {
+            return Double.parseDouble(value.trim().replace(',', '.'));
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static double[] parseRange(String value) {
+        if (value == null) return null;
+        String[] parts = value.trim().split("\\.\\.");
+        if (parts.length != 2) return null;
+        Double a = parseNumber(parts[0]);
+        Double b = parseNumber(parts[1]);
+        return a == null || b == null ? null : new double[] {a, b};
+    }
+
+    private static boolean timeBetween(String value) {
+        if (value == null) return true;
+        String[] parts = value.trim().split("\\s*-\\s*");
+        if (parts.length != 2) return true;
+        try {
+            LocalTime from = LocalTime.parse(parts[0].trim());
+            LocalTime until = LocalTime.parse(parts[1].trim());
+            LocalTime now = LocalTime.now();
+            if (from.equals(until)) return true;
+            if (from.isBefore(until)) {
+                return !now.isBefore(from) && now.isBefore(until);
+            }
+            // Overnight window, e.g. 22:00-06:00.
+            return !now.isBefore(from) || now.isBefore(until);
+        } catch (DateTimeParseException ignored) {
+            return true;
         }
     }
 
@@ -463,8 +701,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
             Bitmap bitmap = fetchBitmap(url);
             main.post(() -> {
                 if (bitmap != null && picture.equals(item.picture)) {
-                    item.avatar.setBackground(null);
-                    item.avatar.setImageBitmap(bitmap);
+                    item.leading.setPicture(bitmap);
                 }
             });
         });
@@ -601,7 +838,9 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
     private void registerDreamReceiver() {
         dreamReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context ignored, Intent intent) {
-                if (Intent.ACTION_DREAMING_STARTED.equals(intent.getAction())) {
+                if ("me.jxl.kiosk.plugins.PARTY_PRESENTATION_CHANGED".equals(intent.getAction())) {
+                    updatePresentation();
+                } else if (Intent.ACTION_DREAMING_STARTED.equals(intent.getAction())) {
                     dreaming = true;
                     updatePresentation();
                 } else if (Intent.ACTION_DREAMING_STOPPED.equals(intent.getAction())) {
@@ -612,6 +851,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
             }
         };
         IntentFilter filter = new IntentFilter();
+        filter.addAction("me.jxl.kiosk.plugins.PARTY_PRESENTATION_CHANGED");
         filter.addAction(Intent.ACTION_DREAMING_STARTED);
         filter.addAction(Intent.ACTION_DREAMING_STOPPED);
         if (Build.VERSION.SDK_INT >= 33) {
@@ -630,8 +870,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
             @Override public void onActivityStarted(Activity a) {}
             @Override public void onActivityResumed(Activity a) {
                 if (a.getPackageName().equals(context.getPackageName())) {
-                    currentActivity = a;
-                    manualFotoo = false;
+                    currentActivity = a; manualFotoo = false;
                 }
                 main.post(QuickActionsOverlayPlugin.this::updatePresentation);
             }
@@ -753,6 +992,101 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
+    private void parseVisibilityRules(String raw) {
+        for (int i = 0; i < ITEM_COUNT; i++) {
+            visibilityEntities[i] = "";
+            visibilityConditions[i] = "Always";
+            visibilityValues[i] = "";
+        }
+
+        if (raw == null) return;
+        int marker = raw.indexOf('#');
+        if (marker < 0 || marker + 1 >= raw.length()) return;
+
+        String rules = raw.substring(marker + 1).trim();
+        if (rules.isEmpty()) return;
+
+        for (String entry : rules.split("\\s*;\\s*")) {
+            if (entry == null || entry.trim().isEmpty()) continue;
+            int equals = entry.indexOf('=');
+            if (equals <= 0) continue;
+
+            int slot;
+            try {
+                slot = Integer.parseInt(entry.substring(0, equals).trim()) - 1;
+            } catch (NumberFormatException ignored) {
+                continue;
+            }
+            if (slot < 0 || slot >= ITEM_COUNT) continue;
+
+            String spec = entry.substring(equals + 1).trim();
+            String[] parts = spec.split("\\|", -1);
+            if (parts.length < 2) continue;
+
+            String entity = parts[0].trim();
+            String condition = canonicalVisibilityCondition(parts[1]);
+            StringBuilder value = new StringBuilder();
+            for (int i = 2; i < parts.length; i++) {
+                if (i > 2) value.append('|');
+                value.append(parts[i]);
+            }
+
+            visibilityConditions[slot] = condition;
+            visibilityValues[slot] = value.toString().trim();
+
+            if (!"Time between".equals(condition) &&
+                    !"time".equalsIgnoreCase(entity) &&
+                    !"@time".equalsIgnoreCase(entity)) {
+                visibilityEntities[slot] = entity;
+            }
+        }
+    }
+
+    private static String canonicalVisibilityCondition(String raw) {
+        String value = raw == null
+                ? ""
+                : raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if ("active".equals(value)) return "Active";
+        if ("inactive".equals(value)) return "Inactive";
+        if ("state equals".equals(value)) return "State equals";
+        if ("state not equals".equals(value)) return "State not equals";
+        if ("numeric above".equals(value)) return "Numeric above";
+        if ("numeric below".equals(value)) return "Numeric below";
+        if ("numeric between".equals(value)) return "Numeric between";
+        if ("time between".equals(value)) return "Time between";
+        return "Always";
+    }
+
+    private static int[] parseItemOrder(String raw) {
+        int[] fallback = new int[] {0, 1, 2, 3, 4, 5};
+        if (raw == null || raw.trim().isEmpty()) return fallback;
+
+        int marker = raw.indexOf('#');
+        if (marker >= 0) raw = raw.substring(0, marker);
+        if (raw.trim().isEmpty()) return fallback;
+
+        int[] result = new int[ITEM_COUNT];
+        boolean[] used = new boolean[ITEM_COUNT];
+        int count = 0;
+
+        String[] parts = raw.split("[,;\\s]+");
+        for (String part : parts) {
+            if (part == null || part.trim().isEmpty()) continue;
+            try {
+                int slot = Integer.parseInt(part.trim()) - 1;
+                if (slot >= 0 && slot < ITEM_COUNT && !used[slot]) {
+                    result[count++] = slot;
+                    used[slot] = true;
+                }
+            } catch (NumberFormatException ignored) {}
+        }
+
+        for (int slot = 0; slot < ITEM_COUNT; slot++) {
+            if (!used[slot]) result[count++] = slot;
+        }
+        return result;
+    }
+
     private static String stringSetting(Map<String, Object> values, String key) {
         Object value = values == null ? null : values.get(key);
         return value == null ? "" : String.valueOf(value).trim();
@@ -794,14 +1128,177 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         }
     }
 
+    private static String percentageBadge(
+            String state,
+            String unit,
+            String deviceClass) {
+        boolean percentage = "%".equals(unit) || "battery".equalsIgnoreCase(deviceClass);
+        if (!percentage || state == null) return "";
+        try {
+            double value = Double.parseDouble(state.trim().replace(',', '.'));
+            int rounded = (int) Math.round(value);
+            return Math.max(0, Math.min(100, rounded)) + "%";
+        } catch (NumberFormatException ignored) {
+            return "";
+        }
+    }
+
+    private static String initials(String value) {
+        if (value == null || value.trim().isEmpty()) return "•";
+        String[] parts = value.trim().split("\\s+");
+        if (parts.length == 1) {
+            String p = parts[0];
+            return p.substring(0, Math.min(2, p.length())).toUpperCase(java.util.Locale.ROOT);
+        }
+        String first = parts[0].substring(0, 1);
+        String last = parts[parts.length - 1].substring(0, 1);
+        return (first + last).toUpperCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * Circular leading content for each pill. A real entity_picture is
+     * center-cropped inside a hard circular clip so it can never spill out of
+     * the pill. Batteries use a filled icon; other percentage sensors use
+     * their value in the same circle. Other entities fall back to initials.
+     */
+    private static final class LeadingView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Paint border = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path clip = new Path();
+        private final Rect src = new Rect();
+        private final RectF dst = new RectF();
+        private Bitmap bitmap;
+        private String badgeText = "•";
+        private boolean battery;
+        private int batteryLevel = -1;
+        private boolean coloredBattery;
+        private int batteryColor = Color.WHITE;
+
+        LeadingView(Context context) {
+            super(context);
+            border.setStyle(Paint.Style.STROKE);
+            border.setStrokeWidth(
+                    Math.max(1f, context.getResources().getDisplayMetrics().density));
+            border.setColor(0x66FFFFFF);
+
+            text.setColor(Color.WHITE);
+            text.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+            text.setTextAlign(Paint.Align.CENTER);
+        }
+
+        void setPicture(Bitmap value) {
+            battery = false;
+            bitmap = value;
+            invalidate();
+        }
+
+        void setBadgeText(String value) {
+            battery = false;
+            bitmap = null;
+            badgeText = value == null || value.isEmpty() ? "•" : value;
+            invalidate();
+        }
+
+        void setBatteryLevel(int value, boolean colored, int textColor) {
+            bitmap = null;
+            battery = true;
+            batteryLevel = value;
+            coloredBattery = colored;
+            batteryColor = textColor;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float size = Math.min(getWidth(), getHeight());
+            float cx = getWidth() / 2f;
+            float cy = getHeight() / 2f;
+            float radius = size / 2f;
+
+            paint.setColor(0xFF3F4248);
+            canvas.drawCircle(cx, cy, radius, paint);
+
+            Bitmap b = bitmap;
+            if (battery) {
+                drawBattery(canvas, cx, cy, size);
+            } else if (b != null && b.getWidth() > 0 && b.getHeight() > 0) {
+                int bw = b.getWidth();
+                int bh = b.getHeight();
+                int crop;
+                if (bw > bh) {
+                    crop = bh;
+                    int left = (bw - crop) / 2;
+                    src.set(left, 0, left + crop, crop);
+                } else {
+                    crop = bw;
+                    int top = (bh - crop) / 2;
+                    src.set(0, top, crop, top + crop);
+                }
+
+                dst.set(cx - radius, cy - radius, cx + radius, cy + radius);
+                clip.reset();
+                clip.addCircle(cx, cy, radius, Path.Direction.CW);
+                int save = canvas.save();
+                canvas.clipPath(clip);
+                canvas.drawBitmap(b, src, dst, paint);
+                canvas.restoreToCount(save);
+            } else {
+                String value = badgeText == null ? "•" : badgeText;
+                float density = getResources().getDisplayMetrics().scaledDensity;
+                float sp = value.length() >= 4 ? 13f : value.length() >= 3 ? 15f : 18f;
+                text.setTextSize(sp * density);
+                Paint.FontMetrics fm = text.getFontMetrics();
+                float baseline = cy - (fm.ascent + fm.descent) / 2f;
+                canvas.drawText(value, cx, baseline, text);
+            }
+
+            canvas.drawCircle(
+                    cx,
+                    cy,
+                    Math.max(0f, radius - border.getStrokeWidth() / 2f),
+                    border);
+        }
+
+        private void drawBattery(Canvas canvas, float cx, float cy, float size) {
+            float left = cx - size * 0.27f;
+            float right = cx + size * 0.23f;
+            float top = cy - size * 0.16f;
+            float bottom = cy + size * 0.16f;
+            float stroke = Math.max(1f, size * 0.025f);
+            paint.setColor(batteryColor);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(stroke);
+            canvas.drawRoundRect(left, top, right, bottom, size * 0.035f, size * 0.035f, paint);
+            paint.setStyle(Paint.Style.FILL);
+            canvas.drawRect(right + stroke, cy - size * 0.07f,
+                    right + size * 0.06f, cy + size * 0.07f, paint);
+            if (batteryLevel >= 0) {
+                float inset = stroke * 1.7f;
+                float innerWidth = Math.max(0f, right - left - inset * 2f);
+                paint.setColor(BatteryLevel.fillColor(batteryLevel, coloredBattery, batteryColor));
+                if (batteryLevel > 0) canvas.drawRect(left + inset, top + inset,
+                        left + inset + innerWidth * batteryLevel / 100f, bottom - inset, paint);
+            } else {
+                text.setTextSize(size * 0.24f);
+                Paint.FontMetrics fm = text.getFontMetrics();
+                canvas.drawText("?", (left + right) / 2f,
+                        cy - (fm.ascent + fm.descent) / 2f, text);
+            }
+        }
+    }
+
     private static final class ItemViews {
         final int index;
-        final ImageView avatar;
+        final View root;
+        final LeadingView leading;
         final TextView label;
         String picture = "";
-        ItemViews(int index, ImageView avatar, TextView label) {
+        ItemViews(int index, View root, LeadingView leading, TextView label) {
             this.index = index;
-            this.avatar = avatar;
+            this.root = root;
+            this.leading = leading;
             this.label = label;
         }
     }

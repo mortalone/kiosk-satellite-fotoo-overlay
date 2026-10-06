@@ -1,5 +1,5 @@
 # HA package: one chooser for Nature Frame / Wall Art and Fotoo.
-# Install Quick Actions & Clock 0.2.0 and expose its actions to Home Assistant.
+# Install Quick Actions & Clock 0.2.8 and expose its actions to Home Assistant.
 # The prefix below matches Jacob's existing Kiosk entities. Change it once if
 # this package is used on a different kiosk. Commands are resolved by their
 # built-in English titles, so auto-generated button entity IDs need not be guessed.
@@ -52,7 +52,7 @@ script:
             sequence:
               - if: "{{ not wall_art_button }}"
                 then:
-                  - stop: "Install/enable Quick Actions & Clock 0.2.0 and expose Show Wall Art now to HA."
+                  - stop: "Install/enable Quick Actions & Clock 0.2.8 and expose Show Wall Art now to HA."
                     error: true
               - action: select.select_option
                 target:
@@ -73,7 +73,7 @@ script:
                   open_button: "{{ combined_fotoo_button or now_playing_fotoo_button or quick_fotoo_button }}"
               - if: "{{ not open_button or not attach_fotoo_button }}"
                 then:
-                  - stop: "Install/enable Quick Actions & Clock 0.2.0 and expose its Fotoo buttons to HA."
+                  - stop: "Install/enable Quick Actions & Clock 0.2.8 and expose its Fotoo buttons to HA."
                     error: true
               # Prevent Android Fotoo and Kiosk's own idle timer racing.
               - action: switch.turn_off

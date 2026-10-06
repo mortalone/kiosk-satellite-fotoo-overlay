@@ -19,11 +19,26 @@ jobs:
           java-version: '21'
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+      - name: Validate Kiosk manifest limits
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          from pathlib import Path
+          for path in [Path('kiosk-satellite-plugin.json'), *Path('plugins').glob('*/kiosk-satellite-plugin.json')]:
+              m = json.loads(path.read_text())
+              assert len(m.get('settings', [])) <= 20, path
+              assert len(m.get('commands', [])) <= 20, path
+          PYTHON
       - name: Test shared overlay visibility rules
         run: |
           mkdir -p /tmp/overlay-policy-test
           javac -d /tmp/overlay-policy-test plugins/quick-actions-overlay/src/me/jxl/kiosk/plugins/quickactionsoverlay/OverlayVisibility.java tests/OverlayVisibilityTest.java
           java -cp /tmp/overlay-policy-test me.jxl.kiosk.plugins.quickactionsoverlay.OverlayVisibilityTest
+      - name: Test Quick Actions battery rendering
+        run: |
+          mkdir -p /tmp/battery-test
+          javac -d /tmp/battery-test plugins/quick-actions-overlay/src/me/jxl/kiosk/plugins/quickactionsoverlay/BatteryLevel.java tests/BatteryLevelTest.java
+          java -cp /tmp/battery-test me.jxl.kiosk.plugins.quickactionsoverlay.BatteryLevelTest
       - name: Install Android platform and D8
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Build compatibility plugin and standalone plugins

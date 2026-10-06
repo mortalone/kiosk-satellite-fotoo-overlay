@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.8
+
+- Publishes Quick Actions & Clock 0.2.8 with the dedicated GitHub update source:
+  https://github.com/mortalone/kiosk-satellite-quick-actions.
+- Preserves newer battery rendering, item order and per-item visibility features.
+- Moves new display/clock controls to a saved native settings action to meet
+  Kiosk's 20-setting limit; the 0.11.7 Quick Actions ZIP exceeded this limit.
+- Adds exact host manifest-limit checks and battery checks to suite CI.
+
 ## 0.11.7
 
 - Quick Actions & Clock 0.2.0 reuses one action configuration on the Kiosk

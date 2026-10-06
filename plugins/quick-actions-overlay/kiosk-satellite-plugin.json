@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "quick-actions-overlay",
   "name": "Quick Actions & Clock",
-  "version": "0.2.0",
+  "version": "0.2.8",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.quickactionsoverlay.QuickActionsOverlayPlugin",
-  "description": "Shared Home Assistant action rail and optional clock across the Kiosk dashboard, screensavers and Fotoo; Party Mode hidden by default.",
+  "description": "Shared Home Assistant actions and optional clock for Kiosk dashboard, screensavers and Fotoo, with battery icons and per-item visibility rules.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
@@ -26,81 +26,7 @@
         "Fotoo only"
       ],
       "group": "Layout",
-      "description": "Choose which screensavers show the action rail; dashboard visibility is configured separately."
-    },
-    {
-      "key": "showOnDashboard",
-      "type": "boolean",
-      "title": "Quick actions on dashboard",
-      "default": false,
-      "group": "Visibility",
-      "description": "Show the same configured actions over the foreground Kiosk dashboard. No duplicate Lovelace configuration."
-    },
-    {
-      "key": "showOnParty",
-      "type": "boolean",
-      "title": "Quick actions in Party Mode",
-      "default": false,
-      "group": "Visibility",
-      "description": "Normally hidden. Explicitly enable to show actions in Party Mode."
-    },
-    {
-      "key": "clockOnDashboard",
-      "type": "boolean",
-      "title": "Clock on dashboard",
-      "default": false,
-      "group": "Clock",
-      "description": "Optional independent clock. For a single clock on Kiosk screensavers, disable the built-in clock before enabling this one. The plugin clock is always hidden in Party Mode."
-    },
-    {
-      "key": "clockOnKiosk",
-      "type": "boolean",
-      "title": "Clock on Kiosk screensaver",
-      "default": false,
-      "group": "Clock",
-      "description": "Optional independent clock. For a single clock on Kiosk screensavers, disable the built-in clock before enabling this one. The plugin clock is always hidden in Party Mode."
-    },
-    {
-      "key": "clockOnFotoo",
-      "type": "boolean",
-      "title": "Clock on Fotoo",
-      "default": false,
-      "group": "Clock",
-      "description": "Optional independent clock. For a single clock on Kiosk screensavers, disable the built-in clock before enabling this one. The plugin clock is always hidden in Party Mode."
-    },
-    {
-      "key": "clockDate",
-      "type": "boolean",
-      "title": "Show clock date",
-      "default": true,
-      "group": "Clock",
-      "description": "Optional independent clock. For a single clock on Kiosk screensavers, disable the built-in clock before enabling this one. The plugin clock is always hidden in Party Mode."
-    },
-    {
-      "key": "clockPosition",
-      "type": "select",
-      "title": "Clock position",
-      "default": "Top right",
-      "options": [
-        "Top left",
-        "Top right",
-        "Center left",
-        "Center right",
-        "Bottom left",
-        "Bottom right"
-      ],
-      "group": "Clock"
-    },
-    {
-      "key": "clockSize",
-      "type": "number",
-      "title": "Clock size",
-      "default": 28,
-      "min": 18,
-      "max": 64,
-      "step": 2,
-      "unit": "sp",
-      "group": "Clock"
+      "description": "Choose which screensavers show the action rail."
     },
     {
       "key": "position",
@@ -173,6 +99,14 @@
       "default": true,
       "group": "Layout",
       "description": "Show friendly name and current state beside the picture."
+    },
+    {
+      "key": "itemOrder",
+      "type": "string",
+      "title": "Item order & visibility",
+      "default": "1,2,3,4,5,6",
+      "group": "Actions",
+      "description": "Order first, then optional per-item rules after #. Example: 1,2,3,4,5,6 # 1=binary_sensor.motion|Active;3=sensor.lux|Numeric below|30"
     },
     {
       "key": "item1Entity",
@@ -285,6 +219,18 @@
       "title": "Hide Quick Actions"
     },
     {
+      "id": "batteryTextColor",
+      "title": "Battery icon: same color as text (saved)"
+    },
+    {
+      "id": "batteryLevelColor",
+      "title": "Battery icon: red/yellow/green by level (saved)"
+    },
+    {
+      "id": "displaySettings",
+      "title": "Display & clock settings (saved)"
+    },
+    {
       "id": "openFotoo",
       "title": "Open Fotoo with Quick Actions"
     },
@@ -303,12 +249,6 @@
     },
     {
       "title": "Actions"
-    },
-    {
-      "title": "Visibility"
-    },
-    {
-      "title": "Clock"
     }
   ]
 }

@@ -39,7 +39,7 @@ The camera height follows the actual frame aspect ratio.
 
 ## 3. Quick Actions & Clock
 
-Package: `quick-actions-overlay-0.2.0.zip`
+Package: `quick-actions-overlay-0.2.8.zip`
 
 A touchable entity/action rail that can sit at any screen edge while leaving the
 middle free for Now Playing. Up to six items are supported.
@@ -68,24 +68,29 @@ Supported tap actions are inferred from the action entity domain:
 
 Person entities automatically use their Home Assistant `entity_picture`.
 
-One set of up to six actions is shared across all selected contexts:
+Quick Actions has its own update repository:
+https://github.com/mortalone/kiosk-satellite-quick-actions
 
-- **Show on** selects Kiosk screensavers, Fotoo, or both (existing setting).
-- **Quick actions on dashboard** adds them above the normal Lovelace dashboard
-  inside the Android Kiosk app. It does not add a Lovelace card in desktop browsers.
-- **Quick actions in Party Mode** is off by default.
-- **Clock on dashboard**, **Clock on Kiosk screensaver**, and **Clock on Fotoo**
-  are independent and off by default. The clock is always hidden in Party Mode.
-- **Clock position**, **Clock size**, and **Show clock date** set its appearance.
+Use that URL in Kiosk Satellite Plugin Manager to install and update directly
+from GitHub. ZIP installations have no repository source; install once through
+Add plugin with this URL to associate the same ID with its update source.
+The normal settings retain all six display/action pairs, battery controls,
+item order and per-item visibility rules.
 
-For a compact action row, choose Horizontal and turn off **Show names and
-states**. Keep the existing art selector below the Lovelace player. If enabling
-this clock on the Kiosk screensaver, disable Kiosk's built-in clock to avoid two
-clocks. Alternatively leave this setting off and keep the existing built-in clock.
+Run **Display & clock settings (saved)** in the plugin's Actions to select:
 
-Update an existing Quick Actions plugin using the 0.2.0 ZIP; its item settings
-retain the same keys. Approve the updated host-control capability when Kiosk
-requests plugin trust; it is needed for the Wall Art command.
+- Quick actions on the normal dashboard in the Android Kiosk app.
+- Optional Quick actions in Party Mode (off by default; existing Party opt-in also works).
+- Independent clock visibility for dashboard, Kiosk screensaver and Fotoo.
+- Date, clock position and size.
+
+Press Save; these display choices persist across restarts and do not consume
+Kiosk's limit of 20 regular settings. **Show on** still selects the action rail's
+Kiosk/Fotoo screensaver contexts (Kiosk Satellite, Fotoo or both).
+The plugin clock is always hidden in Party Mode. Leave it disabled on Kiosk
+screensavers if retaining Kiosk's built-in clock, to avoid two clocks.
+For a compact action row, select Horizontal and turn off Show names and states.
+Approve host.control if Kiosk prompts for updated trust; Wall Art needs it.
 
 ## 4. Spectrum Visualizer Overlay
 
@@ -116,7 +121,7 @@ Put the package in your HA packages directory (enable packages in
 HA if the new input_select is not loaded. Use the example built-in entities card
 for `input_select.raspberry_screensaver_source`.
 
-Install Quick Actions & Clock 0.2.0 and expose its commands as Home Assistant
+Install Quick Actions & Clock 0.2.8 and expose its commands as Home Assistant
 buttons in Kiosk's Plugin Manager. The package uses Jacob's existing prefix
 `raspberry_raspberry_pi_4`; change `kiosk_prefix` once for another device.
 Buttons are resolved by their standard English titles, so keep those names or
@@ -138,7 +143,7 @@ Actions to Fotoo**, and **Show Wall Art now** are also available directly.
 ## Private gallery covers
 
 Update Nature Frame via HACS to the integration version 0.8.2 included in suite
-release 0.11.7, restart Home Assistant and refresh the dashboard. Private library
+release 0.11.8, restart Home Assistant and refresh the dashboard. Private library
 covers now use signed local media preview URLs. Existing image folders and
 profile selections are retained. Signatures renew during catalogue refresh;
 images are not copied into public `/local` storage.
