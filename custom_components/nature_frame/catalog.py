@@ -6,7 +6,8 @@ import html
 import mimetypes
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -14,6 +15,7 @@ from urllib.parse import quote
 from PIL import Image, ImageOps
 
 from homeassistant.core import HomeAssistant
+from homeassistant.components.http.auth import async_sign_path
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 INKY_REPO = "veteranbv/inky-bird-frame"
@@ -214,6 +216,7 @@ class NatureFrameCatalog:
         self._private_galleries: dict[str, NatureGallery] = {}
         self._last_refresh = 0.0
         self._last_private_refresh = 0.0
+        self._signed_covers: dict[str, tuple[float, str]] = {}
         self._lock = asyncio.Lock()
 
     async def async_refresh(self, force: bool = False) -> None:
@@ -273,6 +276,22 @@ class NatureFrameCatalog:
                     self._load_private_galleries
                 )
                 self._last_private_refresh = time.monotonic()
+
+            # <img src> in Lovelace cannot send HA's bearer header to /media.
+            # Sign only the preview path, using HA's limited content user.
+            # Cache it so routine entity updates do not reload all cover images.
+            active_paths = set()
+            for key, gallery in self._private_galleries.items():
+                path = (gallery.thumbnail or "").split("?", 1)[0]
+                if not path.startswith(f"{PRIVATE_MEDIA_URL_ROOT}/"):
+                    continue
+                active_paths.add(path)
+                cached = self._signed_covers.get(path)
+                if cached is None or now >= cached[0]:
+                    url = async_sign_path(self.hass, path, timedelta(days=2), use_content_user=True)
+                    cached = self._signed_covers[path] = (now + 24 * 60 * 60, url)
+                self._private_galleries[key] = replace(gallery, cover_thumbnail=cached[1])
+            self._signed_covers = {p: value for p, value in self._signed_covers.items() if p in active_paths}
 
             self.galleries = {
                 **self._remote_galleries,

@@ -3,14 +3,14 @@
 Native **Now Playing** and **doorbell camera** overlays for Kiosk Satellite.
 The same plugin still supports Fotoo, but Fotoo is no longer required.
 
-## Screensaver Overlay Suite 0.11.6
+## Screensaver Overlay Suite 0.11.7
 
 The original combined Screensaver Overlay remains available as a compatibility
 plugin. The same GitHub release now also publishes standalone ZIP packages for:
 
 - **Now Playing Overlay 0.1.0**
 - **Doorbell Overlay 0.1.0**
-- **Screensaver Quick Actions 0.1.0**
+- **Quick Actions & Clock 0.2.0**
 - **Spectrum Visualizer Overlay 0.1.0**
 
 The standalone plugins are installed with Kiosk Satellite's **Install from ZIP**
@@ -20,14 +20,24 @@ Now Playing keeps the stable artwork handling and the in-Activity overlay path,
 so Kiosk Satellite's own Home Assistant Media / Nature Frame screensaver works
 with **Legacy WebView renderer = Off**.
 
-Quick Actions adds a touchable Home Assistant entity/action rail. A person
+Quick Actions adds a touchable Home Assistant entity/action rail and optional clock.
+The same configured actions can now appear over the Kiosk Lovelace dashboard,
+Kiosk screensavers and Fotoo. Visibility is selected independently; Party Mode
+hides actions by default and always hides this clock.
+For a compact rail, turn off **Show names and states**.
+
+Nature Frame 0.8.2 fixes private gallery covers with signed local preview URLs.
+The example HA package provides a chooser and script to switch immediately
+between Nature Frame and Fotoo. See `PLUGINS.md` for setup.
+
+ A person
 entity can supply the displayed face while a different entity such as
 `script.kald_pa_malte` runs when the item is tapped.
 
 Spectrum Visualizer includes both a decorative animated spectrum and an
 experimental microphone FFT mode.
 
-The repository continues to package Nature Frame 0.8.1.
+The repository continues to package Nature Frame 0.8.2.
 
 The overlay listens to Kiosk Satellite's official `screensaver.state` and
 `screensaver.view` plugin events, so it works above Kiosk Satellite's own

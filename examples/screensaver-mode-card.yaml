@@ -1,6 +1,5 @@
-# Compact Lovelace card for examples/screensaver-mode-package.yaml
-type: custom:mushroom-select-card
-entity: input_select.raspberry_screensaver_source
-name: Screensaver
-icon: mdi:image-multiple
-fill_container: true
+# Built-in card; no additional frontend dependency.
+type: entities
+entities:
+  - entity: input_select.raspberry_screensaver_source
+    name: Billedvisning

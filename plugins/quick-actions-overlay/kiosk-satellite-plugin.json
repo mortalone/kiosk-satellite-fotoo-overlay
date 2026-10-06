@@ -2,16 +2,17 @@
   "schemaVersion": 1,
   "apiVersion": 1,
   "id": "quick-actions-overlay",
-  "name": "Screensaver Quick Actions",
-  "version": "0.1.0",
+  "name": "Quick Actions & Clock",
+  "version": "0.2.0",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.quickactionsoverlay.QuickActionsOverlayPlugin",
-  "description": "Touchable Home Assistant entity/action rail for Kiosk Satellite screensavers and Fotoo.",
+  "description": "Shared Home Assistant action rail and optional clock across the Kiosk dashboard, screensavers and Fotoo; Party Mode hidden by default.",
   "author": "Local Kiosk Satellite project",
   "license": "MIT",
   "capabilities": [
     "overlay",
-    "host.read"
+    "host.read",
+    "host.control"
   ],
   "settings": [
     {
@@ -25,7 +26,81 @@
         "Fotoo only"
       ],
       "group": "Layout",
-      "description": "Choose which screensavers show the action rail."
+      "description": "Choose which screensavers show the action rail; dashboard visibility is configured separately."
+    },
+    {
+      "key": "showOnDashboard",
+      "type": "boolean",
+      "title": "Quick actions on dashboard",
+      "default": false,
+      "group": "Visibility",
+      "description": "Show the same configured actions over the foreground Kiosk dashboard. No duplicate Lovelace configuration."
+    },
+    {
+      "key": "showOnParty",
+      "type": "boolean",
+      "title": "Quick actions in Party Mode",
+      "default": false,
+      "group": "Visibility",
+      "description": "Normally hidden. Explicitly enable to show actions in Party Mode."
+    },
+    {
+      "key": "clockOnDashboard",
+      "type": "boolean",
+      "title": "Clock on dashboard",
+      "default": false,
+      "group": "Clock",
+      "description": "Optional independent clock. For a single clock on Kiosk screensavers, disable the built-in clock before enabling this one. The plugin clock is always hidden in Party Mode."
+    },
+    {
+      "key": "clockOnKiosk",
+      "type": "boolean",
+      "title": "Clock on Kiosk screensaver",
+      "default": false,
+      "group": "Clock",
+      "description": "Optional independent clock. For a single clock on Kiosk screensavers, disable the built-in clock before enabling this one. The plugin clock is always hidden in Party Mode."
+    },
+    {
+      "key": "clockOnFotoo",
+      "type": "boolean",
+      "title": "Clock on Fotoo",
+      "default": false,
+      "group": "Clock",
+      "description": "Optional independent clock. For a single clock on Kiosk screensavers, disable the built-in clock before enabling this one. The plugin clock is always hidden in Party Mode."
+    },
+    {
+      "key": "clockDate",
+      "type": "boolean",
+      "title": "Show clock date",
+      "default": true,
+      "group": "Clock",
+      "description": "Optional independent clock. For a single clock on Kiosk screensavers, disable the built-in clock before enabling this one. The plugin clock is always hidden in Party Mode."
+    },
+    {
+      "key": "clockPosition",
+      "type": "select",
+      "title": "Clock position",
+      "default": "Top right",
+      "options": [
+        "Top left",
+        "Top right",
+        "Center left",
+        "Center right",
+        "Bottom left",
+        "Bottom right"
+      ],
+      "group": "Clock"
+    },
+    {
+      "key": "clockSize",
+      "type": "number",
+      "title": "Clock size",
+      "default": 28,
+      "min": 18,
+      "max": 64,
+      "step": 2,
+      "unit": "sp",
+      "group": "Clock"
     },
     {
       "key": "position",
@@ -208,6 +283,18 @@
     {
       "id": "hide",
       "title": "Hide Quick Actions"
+    },
+    {
+      "id": "openFotoo",
+      "title": "Open Fotoo with Quick Actions"
+    },
+    {
+      "id": "showWallArt",
+      "title": "Show Wall Art now"
+    },
+    {
+      "id": "attachFotoo",
+      "title": "Attach Quick Actions to Fotoo"
     }
   ],
   "groups": [
@@ -216,6 +303,12 @@
     },
     {
       "title": "Actions"
+    },
+    {
+      "title": "Visibility"
+    },
+    {
+      "title": "Clock"
     }
   ]
 }

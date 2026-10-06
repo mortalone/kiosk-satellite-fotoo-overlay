@@ -37,9 +37,9 @@ Doorbell configuration is independent from Now Playing:
 
 The camera height follows the actual frame aspect ratio.
 
-## 3. Screensaver Quick Actions
+## 3. Quick Actions & Clock
 
-Package: `quick-actions-overlay-0.1.0.zip`
+Package: `quick-actions-overlay-0.2.0.zip`
 
 A touchable entity/action rail that can sit at any screen edge while leaving the
 middle free for Now Playing. Up to six items are supported.
@@ -68,6 +68,25 @@ Supported tap actions are inferred from the action entity domain:
 
 Person entities automatically use their Home Assistant `entity_picture`.
 
+One set of up to six actions is shared across all selected contexts:
+
+- **Show on** selects Kiosk screensavers, Fotoo, or both (existing setting).
+- **Quick actions on dashboard** adds them above the normal Lovelace dashboard
+  inside the Android Kiosk app. It does not add a Lovelace card in desktop browsers.
+- **Quick actions in Party Mode** is off by default.
+- **Clock on dashboard**, **Clock on Kiosk screensaver**, and **Clock on Fotoo**
+  are independent and off by default. The clock is always hidden in Party Mode.
+- **Clock position**, **Clock size**, and **Show clock date** set its appearance.
+
+For a compact action row, choose Horizontal and turn off **Show names and
+states**. Keep the existing art selector below the Lovelace player. If enabling
+this clock on the Kiosk screensaver, disable Kiosk's built-in clock to avoid two
+clocks. Alternatively leave this setting off and keep the existing built-in clock.
+
+Update an existing Quick Actions plugin using the 0.2.0 ZIP; its item settings
+retain the same keys. Approve the updated host-control capability when Kiosk
+requests plugin trust; it is needed for the Wall Art command.
+
 ## 4. Spectrum Visualizer Overlay
 
 Package: `spectrum-visualizer-overlay-0.1.0.zip`
@@ -92,12 +111,37 @@ See:
 - `examples/screensaver-mode-package.yaml`
 - `examples/screensaver-mode-card.yaml`
 
-Nature Frame mode turns **Keep screen on** and Kiosk Satellite's own screensaver
-on and selects **Home Assistant Media**.
+Put the package in your HA packages directory (enable packages in
+`configuration.yaml` if necessary), then reload scripts/automations and restart
+HA if the new input_select is not loaded. Use the example built-in entities card
+for `input_select.raspberry_screensaver_source`.
 
-Fotoo mode turns Kiosk Satellite's own screensaver off and **Keep screen on**
-off. Android is then allowed to reach its configured DreamService (Fotoo)
-without racing Kiosk Satellite's idle timer.
+Install Quick Actions & Clock 0.2.0 and expose its commands as Home Assistant
+buttons in Kiosk's Plugin Manager. The package uses Jacob's existing prefix
+`raspberry_raspberry_pi_4`; change `kiosk_prefix` once for another device.
+Buttons are resolved by their standard English titles, so keep those names or
+adjust the matching templates. Ensure the configured Kiosk media source is the
+existing Nature Frame profile; the script retains that selected source.
+
+- **Nature Frame** enables Keep screen on and Kiosk screensaver, selects
+  Home Assistant Media, brings Kiosk to the front and starts Wall Art now.
+- **Fotoo** disables the competing Kiosk idle timer and opens Fotoo immediately.
+  It prefers an existing combined/Now Playing Fotoo launcher, then attaches
+  Quick Actions & Clock, preserving the existing overlay owner.
+
+Call `script.raspberry_apply_art_source` with `source: Nature Frame` or
+`source: Fotoo`, or use `script.raspberry_toggle_art_source` as a single button.
+The input_select expresses the requested source; it is not an Android app sensor.
+The separate plugin commands **Open Fotoo with Quick Actions**, **Attach Quick
+Actions to Fotoo**, and **Show Wall Art now** are also available directly.
+
+## Private gallery covers
+
+Update Nature Frame via HACS to the integration version 0.8.2 included in suite
+release 0.11.7, restart Home Assistant and refresh the dashboard. Private library
+covers now use signed local media preview URLs. Existing image folders and
+profile selections are retained. Signatures renew during catalogue refresh;
+images are not copied into public `/local` storage.
 
 ## Migration from the combined plugin
 

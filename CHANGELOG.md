@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.7
+
+- Quick Actions & Clock 0.2.0 reuses one action configuration on the Kiosk
+  dashboard, Kiosk screensavers and Fotoo with independent visibility controls.
+- Adds an optional clock/date with independent position and size. Party Mode
+  hides actions by default and always hides the plugin clock.
+- Adds explicit Fotoo launch/attach and Wall Art commands, with an HA chooser,
+  apply script and toggle script that preserve an existing Fotoo overlay owner.
+- Nature Frame 0.8.2 signs private cover preview URLs so Lovelace image requests
+  can load them; signatures are cached and refreshed without URL churn.
+- Adds visibility policy checks and private preview/signature regression tests.
+
 ## 0.11.6
 
 - Finalizes the standalone overlay suite release with complete migration and

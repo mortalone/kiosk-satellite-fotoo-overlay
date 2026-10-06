@@ -17,6 +17,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.format.DateFormat;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -38,6 +39,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -61,11 +63,31 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
     private BroadcastReceiver dreamReceiver;
 
     private boolean dreaming;
+    private boolean manualFotoo;
     private boolean kioskScreensaverActive;
     private String kioskScreensaverView = "";
     private boolean showOnKiosk = true;
     private boolean showOnFotoo = true;
     private boolean forcePreview;
+    private boolean manualHidden;
+    private boolean showOnDashboard;
+    private boolean showOnParty;
+    private boolean clockOnDashboard;
+    private boolean clockOnKiosk;
+    private boolean clockOnFotoo;
+    private boolean clockDate;
+    private String clockPosition = "Top right";
+    private int clockSize = 28;
+    private TextView clock;
+    private int presentedSurface = -1;
+    private String clockText = "";
+    private final Runnable presentationTick = new Runnable() {
+        @Override public void run() {
+            if (host == null) return;
+            updatePresentation();
+            main.postDelayed(this, 500);
+        }
+    };
 
     private String position = "Center left";
     private String layout = "Vertical";
@@ -106,7 +128,8 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         readHomeAssistantBaseUrl();
         applySettings(settings);
         readInitialScreensaverState();
-        host.status("Ready. Quick Actions follow the selected screensavers.", false);
+        main.post(presentationTick);
+        host.status("Ready. Actions and clock follow the selected display contexts.", false);
     }
 
     @Override
@@ -116,12 +139,43 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
 
     @Override
     public synchronized void execute(String command, Map<String, Object> arguments) {
-        if ("show".equals(command) || "test".equals(command)) {
+        if ("openFotoo".equals(command)) {
+            main.post(() -> {
+                try {
+                    Intent launch = context.getPackageManager().getLaunchIntentForPackage("com.bo.fotoo");
+                    if (launch == null) throw new IllegalStateException("Fotoo is not installed");
+                    manualFotoo = true; manualHidden = false; forcePreview = false;
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(launch);
+                    main.postDelayed(this::updatePresentation, 500);
+                } catch (Throwable error) { manualFotoo = false; if (host != null) host.status("Could not open Fotoo: " + safeMessage(error), true); }
+            });
+        } else if ("attachFotoo".equals(command)) {
+            main.post(() -> { manualFotoo = true; manualHidden = false; forcePreview = false; updatePresentation(); });
+        } else if ("showWallArt".equals(command)) {
+            main.post(() -> {
+                try {
+                    Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+                    if (launch == null) throw new IllegalStateException("Kiosk has no launchable activity");
+                    manualFotoo = false; manualHidden = false; forcePreview = false;
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(launch);
+                    PluginHost owner = host;
+                    main.postDelayed(() -> { if (host != owner || owner == null) return;
+                        owner.executeCommand("startScreensaver", Collections.emptyMap(), (ok, data, error) -> {
+                            if (!ok && host != null) host.status("Could not start Wall Art: " + error, true);
+                        });
+                    }, 500);
+                } catch (Throwable error) { if (host != null) host.status("Could not show Wall Art: " + safeMessage(error), true); }
+            });
+        } else if ("show".equals(command) || "test".equals(command)) {
+            manualHidden = false;
             forcePreview = true;
             main.post(this::updatePresentation);
         } else if ("hide".equals(command)) {
+            manualHidden = true;
             forcePreview = false;
-            main.post(this::hideRail);
+            main.post(() -> { hideRail(); hideClock(); });
         } else {
             throw new IllegalArgumentException("Unknown command: " + command);
         }
@@ -157,6 +211,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
 
     @Override
     public synchronized void stop() {
+        main.removeCallbacks(presentationTick);
         for (String entity : new HashSet<>(subscriptions)) {
             try { host.unsubscribe("ha.entity." + entity); } catch (Throwable ignored) {}
         }
@@ -167,7 +222,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         if (application != null && lifecycleCallbacks != null) {
             try { application.unregisterActivityLifecycleCallbacks(lifecycleCallbacks); } catch (Throwable ignored) {}
         }
-        main.post(this::hideRail);
+        main.post(() -> { hideRail(); hideClock(); });
         if (io != null) io.shutdownNow();
         io = null;
         currentActivity = null;
@@ -175,9 +230,19 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
     }
 
     private void applySettings(Map<String, Object> values) {
+        manualHidden = false;
         String target = stringSetting(values, "overlayTarget");
         showOnKiosk = !"Fotoo only".equals(target);
         showOnFotoo = !"Kiosk Satellite only".equals(target);
+        showOnDashboard = Boolean.TRUE.equals(values.get("showOnDashboard"));
+        showOnParty = Boolean.TRUE.equals(values.get("showOnParty"));
+        clockOnDashboard = Boolean.TRUE.equals(values.get("clockOnDashboard"));
+        clockOnKiosk = Boolean.TRUE.equals(values.get("clockOnKiosk"));
+        clockOnFotoo = Boolean.TRUE.equals(values.get("clockOnFotoo"));
+        clockDate = values.get("clockDate") == null || Boolean.TRUE.equals(values.get("clockDate"));
+        String cp = stringSetting(values, "clockPosition");
+        if (!cp.isEmpty()) clockPosition = cp;
+        clockSize = intSetting(values, "clockSize", 28, 18, 64);
 
         String nextPosition = stringSetting(values, "position");
         if (!nextPosition.isEmpty()) position = nextPosition;
@@ -210,6 +275,7 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
 
         main.post(() -> {
             hideRail();
+            hideClock();
             updatePresentation();
         });
     }
@@ -238,20 +304,61 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
         });
     }
 
-    private boolean overlayActive() {
-        boolean kiosk = showOnKiosk && kioskScreensaverActive &&
-                !"black".equals(kioskScreensaverView) &&
-                !"blank".equals(kioskScreensaverView);
-        return forcePreview || kiosk || (showOnFotoo && dreaming);
+    private int surface() {
+        Activity a = activeKioskActivity();
+        boolean foreground = a != null && a.hasWindowFocus();
+        View root = a == null ? null : a.findViewById(android.R.id.content);
+        boolean party = root != null && root.findViewWithTag("party-mode:view") != null;
+        boolean blank = "black".equals(kioskScreensaverView) || "blank".equals(kioskScreensaverView);
+        return OverlayVisibility.surface(foreground, dreaming || manualFotoo, kioskScreensaverActive, blank, party);
     }
 
     private void updatePresentation() {
-        if (!overlayActive()) {
-            hideRail();
-            return;
+        if (host == null) return;
+        if (manualHidden) { hideRail(); hideClock(); return; }
+        int surface = surface();
+        if (surface != presentedSurface) {
+            hideRail(); hideClock();
+            presentedSurface = surface;
         }
-        ensureRail();
-        refreshRail();
+        boolean preview = forcePreview && surface != OverlayVisibility.PARTY;
+        boolean actions = preview || OverlayVisibility.visible(surface, showOnDashboard, showOnKiosk, showOnFotoo, showOnParty);
+        boolean time = OverlayVisibility.visible(surface, clockOnDashboard, clockOnKiosk, clockOnFotoo, false);
+        if (actions) {
+            if (rail == null) { ensureRail(); refreshRail(); }
+        } else hideRail();
+        if (time) { ensureClock(); refreshClock(); } else hideClock();
+    }
+
+    private void ensureClock() {
+        if (clock != null || context == null) return;
+        TextView view = new TextView(context);
+        view.setTag("quick-actions-overlay:clock");
+        view.setTextColor(Color.WHITE);
+        view.setTextSize(clockSize);
+        view.setGravity(Gravity.RIGHT);
+        view.setPadding(dp(12), dp(8), dp(12), dp(8));
+        view.setBackground(cardBackground(0xB7222328, 18));
+        view.setAlpha(opacity / 100f);
+        try {
+            if (addOverlayView(view, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, gravityForPosition(clockPosition), dp(16))) clock = view;
+        } catch (Throwable error) {
+            host.status("Clock overlay failed: " + safeMessage(error), true);
+        }
+    }
+
+    private void refreshClock() {
+        if (clock == null) return;
+        Date now = new Date();
+        String value = DateFormat.getTimeFormat(context).format(now);
+        if (clockDate) value += "\n" + DateFormat.getMediumDateFormat(context).format(now);
+        if (!value.equals(clockText)) { clock.setText(value); clockText = value; }
+    }
+
+    private void hideClock() {
+        View view = clock; clock = null; clockText = "";
+        removeOverlayView(view);
     }
 
     private void ensureRail() {
@@ -407,7 +514,8 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
     }
 
     private boolean preferInAppOverlay() {
-        return showOnKiosk && kioskScreensaverActive;
+        Activity a = activeKioskActivity();
+        return !dreaming && !manualFotoo && a != null && a.hasWindowFocus();
     }
 
     private boolean addOverlayView(
@@ -443,6 +551,9 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
+        if ("quick-actions-overlay:clock".equals(view.getTag())) {
+            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        }
         params.gravity = gravity;
         params.x = ((gravity & Gravity.LEFT) == Gravity.LEFT ||
                 (gravity & Gravity.RIGHT) == Gravity.RIGHT) ? edge : 0;
@@ -518,10 +629,15 @@ public final class QuickActionsOverlayPlugin implements KioskPlugin {
             @Override public void onActivityCreated(Activity a, Bundle b) {}
             @Override public void onActivityStarted(Activity a) {}
             @Override public void onActivityResumed(Activity a) {
-                if (a.getPackageName().equals(context.getPackageName())) currentActivity = a;
+                if (a.getPackageName().equals(context.getPackageName())) {
+                    currentActivity = a;
+                    manualFotoo = false;
+                }
+                main.post(QuickActionsOverlayPlugin.this::updatePresentation);
             }
             @Override public void onActivityPaused(Activity a) {
                 if (currentActivity == a) currentActivity = null;
+                main.post(QuickActionsOverlayPlugin.this::updatePresentation);
             }
             @Override public void onActivityStopped(Activity a) {
                 if (currentActivity == a) currentActivity = null;

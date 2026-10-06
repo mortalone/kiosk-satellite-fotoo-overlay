@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "fotoo-system-overlay-poc",
   "name": "Screensaver Overlay",
-  "version": "0.11.6",
+  "version": "0.11.7",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.fotoooverlay.FotooOverlayPlugin",
   "description": "Compatibility bundle for Now Playing and doorbell overlays. Standalone overlay plugins are published in the same release for migration/testing.",

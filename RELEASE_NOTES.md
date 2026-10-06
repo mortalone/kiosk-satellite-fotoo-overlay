@@ -1,62 +1,31 @@
-## Screensaver Overlay Suite 0.11.6
+## Screensaver Overlay Suite 0.11.7
 
-This release starts the migration from one large overlay plugin to smaller,
-independent plugins. The existing combined **Screensaver Overlay** is still
-included and remains functionally unchanged.
+### Quick Actions & Clock 0.2.0
 
-### Standalone ZIPs
+One action configuration can now appear over the normal Kiosk Lovelace dashboard,
+Kiosk screensavers and Fotoo. Enable **Quick actions on dashboard** to reuse the
+same buttons. For a compact row, select Horizontal and disable **Show names and
+states**. Party Mode hides actions by default.
 
-The release publishes:
+An optional clock/date has independent dashboard, Kiosk screensaver and Fotoo
+visibility, size and position. It is always hidden in Party Mode. All new display
+options start off; retain Kiosk's existing clock or enable this one, avoiding a
+duplicate clock on the screensaver.
 
-- `now-playing-overlay-0.1.0.zip`
-- `doorbell-overlay-0.1.0.zip`
-- `quick-actions-overlay-0.1.0.zip`
-- `spectrum-visualizer-overlay-0.1.0.zip`
+New Fotoo launch/attach and Wall Art commands support the updated HA chooser,
+apply script and toggle script in `examples/screensaver-mode-package.yaml`.
+Existing combined/Now Playing Fotoo launchers are preferred when installed.
+Expose plugin commands as HA buttons. See `PLUGINS.md` for setup.
 
-Install these from **Kiosk Satellite -> Plugin Manager -> Install from ZIP**.
+### Nature Frame 0.8.2
 
-### Now Playing Overlay
+Fixes private gallery covers by signing local media preview URLs. Signatures are
+cached and renewed so frequent catalogue updates do not reload images. Update
+through HACS, restart HA and refresh Lovelace.
 
-Keeps the stable cover-art cache and the in-Activity rendering path that works
-on Kiosk Satellite's own Home Assistant Media screensaver with **Legacy WebView
-renderer = Off**.
+### Packages and checks
 
-### Doorbell Overlay
-
-Doorbell triggers/camera/size/position/time are now independent from Now
-Playing, freeing the per-plugin settings budget.
-
-### Screensaver Quick Actions
-
-Adds a touchable rail with up to six items. Each item has a display entity and
-an optional separate action entity. Example:
-
-- display: `person.malte`
-- action: `script.kald_pa_malte`
-
-The face comes from the person's `entity_picture`; tapping the item runs the
-script. Script, button, automation, scene, light, switch, input_boolean and fan
-actions are supported.
-
-### Spectrum Visualizer
-
-Adds a Winamp-style spectrum with:
-
-- **Animated** mode
-- **Microphone** mode using a 1024-point FFT from Android AudioRecord
-- optional media_player gating so it only appears while playback is playing
-
-Microphone mode is experimental because Android devices may not allow the
-visualizer and Voice Satellite/wake-word recording to own the microphone at the
-same time.
-
-### Nature Frame / Fotoo selector
-
-`examples/screensaver-mode-package.yaml` switches deterministically:
-
-- Nature Frame: Keep screen on ON + Kiosk screensaver ON + Home Assistant Media
-- Fotoo: Kiosk screensaver OFF + Keep screen on OFF
-
-This avoids a race between Kiosk Satellite's idle timer and Android/Fotoo.
-
-See `PLUGINS.md` for migration details.
+Install `quick-actions-overlay-0.2.0.zip` in Kiosk Satellite's Plugin Manager.
+The compatibility plugin and other standalone plugins remain available.
+Includes automated visibility checks and five private cover/signature tests.
+Android compilation and D8 packaging run for all plugin packages.
